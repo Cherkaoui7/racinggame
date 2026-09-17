@@ -11,6 +11,15 @@
     100% { transform: scale(1.5); opacity: 0; }
   }
 
+  @keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+  }
+
+  @keyframes shimmer {
+    100% { transform: translateX(100%); }
+  }
+
   @keyframes fade-in-up {
     0% { transform: translateY(40px); opacity: 0; }
     100% { transform: translateY(0); opacity: 1; }

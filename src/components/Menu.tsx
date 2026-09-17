@@ -2,16 +2,14 @@ import { useGameStore } from '../store/useGameStore'
 import { Trophy, Play } from 'lucide-react'
 
 export function Menu() {
-  const { 
-    startGame, 
-    openGarage, 
-    difficulty, 
-    setDifficulty, 
-    graphicsQuality, 
-    effectiveQuality, 
-    hardwareProfile, 
-    setGraphicsQuality 
-  } = useGameStore()
+  const startGame = useGameStore(s => s.startGame)
+  const openGarage = useGameStore(s => s.openGarage)
+  const difficulty = useGameStore(s => s.difficulty)
+  const setDifficulty = useGameStore(s => s.setDifficulty)
+  const graphicsQuality = useGameStore(s => s.graphicsQuality)
+  const effectiveQuality = useGameStore(s => s.effectiveQuality)
+  const hardwareProfile = useGameStore(s => s.hardwareProfile)
+  const setGraphicsQuality = useGameStore(s => s.setGraphicsQuality)
 
   return (
     <div className="absolute inset-0 bg-neutral-950 text-white font-sans flex flex-col overflow-hidden">

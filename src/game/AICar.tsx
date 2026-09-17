@@ -2,93 +2,9 @@ import { useRef, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { RigidBody, RapierRigidBody, CuboidCollider } from '@react-three/rapier'
 import { useGameStore } from '../store/useGameStore'
-import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 
-function MiniModel({ color }: { color: string }) {
-  const { scene } = useGLTF('/Mini cooper.glb')
-  const effectiveQuality = useGameStore((state) => state.effectiveQuality)
-  const isLow = effectiveQuality === 'low'
-
-  const clonedScene = useMemo(() => {
-    const clone = scene.clone(true)
-    const targetColor = new THREE.Color(color)
-    clone.traverse((child) => {
-      if (child.name === 'Plane') {
-        child.visible = false
-        return
-      }
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh
-        const mat = mesh.material as THREE.MeshStandardMaterial | undefined
-        const name = ((mat?.name || '') + ' ' + (mesh.name || '')).toLowerCase()
-
-        // Performance Optimization for AI Cars:
-        // Cull ALL interior components, mechanics, engine, suspension, and hidden chassis parts
-        const isInteriorOrExcess = 
-          name.includes('interior') ||
-          name.includes('seat') ||
-          name.includes('das') ||
-          name.includes('rubber') ||
-          name.includes('brakedi') ||
-          name.includes('hole') ||
-          name.includes('fab') ||
-          name.includes('pedal') ||
-          name.includes('engine') ||
-          name.includes('motor') ||
-          name.includes('suspension') ||
-          name.includes('radiator') ||
-          name.includes('battery') ||
-          name.includes('axle') ||
-          name.includes('chassis') ||
-          name.includes('underbody') ||
-          name.includes('floor') ||
-          name.includes('wiper')
-
-        if (isInteriorOrExcess) {
-          mesh.visible = false
-          return
-        }
-
-        // Cull micro-geometry that is invisible at race speed
-        if (mesh.geometry?.attributes?.position) {
-          const vCount = mesh.geometry.attributes.position.count
-          if (isLow ? vCount < 120 : vCount < 70) {
-            mesh.visible = false
-            return
-          }
-        }
-
-        if (mesh.material) {
-          // STRICT COLOR CLONING: Only clone body panel materials that actually change color!
-          // All other 135+ parts share original materials without GPU state churn.
-          const isColoredBodyPart = 
-            name.includes('paint') || 
-            name.includes('body') || 
-            name.includes('roof')
-
-          if (isColoredBodyPart) {
-            const bodyMat = (mesh.material as THREE.MeshStandardMaterial).clone()
-            bodyMat.color = targetColor
-            bodyMat.roughness = 0.3
-            bodyMat.metalness = 0.7
-            mesh.material = bodyMat
-          }
-        }
-      }
-    })
-    return clone
-  }, [scene, color, isLow])
-  
-  return (
-    <primitive 
-      object={clonedScene} 
-      scale={1}
-      position={[0, -0.4, 0]} 
-      rotation={[0, Math.PI, 0]} 
-    />
-  )
-}
+import { EnhancedCarModel, type VehicleState } from './EnhancedCarModel'
 
 interface CircuitWaypoint {
   pos: THREE.Vector3
@@ -180,7 +96,9 @@ export function AICar({
   const lapRef = useRef(1)
   const prevXRef = useRef(initialPosition[0])
   const hasTraversedHalf = useRef(false)
-  const { addAIRef, difficulty } = useGameStore()
+  const vehicleStateRef = useRef<VehicleState>({ speed: 0, isBraking: false, isNitro: false, steering: 0 })
+  const addAIRef = useGameStore(s => s.addAIRef)
+  const difficulty = useGameStore(s => s.difficulty)
   const scratch = useMemo(() => createScratch(), [])
 
   useEffect(() => {
@@ -376,6 +294,13 @@ export function AICar({
         }
       }
 
+      vehicleStateRef.current = {
+        speed: currentSpeed,
+        isBraking: engineAccel < 0,
+        isNitro: false,
+        steering: steerValue
+      }
+
       const mass = bodyRef.current.mass()
 
       // Unstuck auto-recovery
@@ -451,7 +376,11 @@ export function AICar({
     >
       <CuboidCollider args={[1, 0.4, 2]} density={1200 / 6.4} />
       <group>
-        <MiniModel color={color} />
+        <EnhancedCarModel 
+          color={color}
+          isPlayer={false}
+          vehicleStateRef={vehicleStateRef}
+        />
       </group>
     </RigidBody>
   )

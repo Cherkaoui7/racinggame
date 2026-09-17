@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useRef, useEffect } from 'react'
+import * as THREE from 'three'
 import { Text } from '@react-three/drei'
 import { useGameStore } from '../store/useGameStore'
 
@@ -77,49 +78,96 @@ export function CityBackdrop() {
 
   const isLow = effectiveQuality === 'low'
 
+  // InstancedMesh refs
+  const buildingMeshRef = useRef<THREE.InstancedMesh>(null)
+  const windowMeshRef = useRef<THREE.InstancedMesh>(null)
+  const antennaBaseRef = useRef<THREE.InstancedMesh>(null)
+  const antennaLightRef = useRef<THREE.InstancedMesh>(null)
+
+  useEffect(() => {
+    if (!buildingMeshRef.current || !windowMeshRef.current) return
+
+    const dummy = new THREE.Object3D()
+    const colorObj = new THREE.Color()
+
+    let antennaIndex = 0
+
+    buildings.forEach((b, i) => {
+      // 1. Main Tower Block
+      dummy.position.set(b.position[0], b.position[1], b.position[2])
+      dummy.scale.set(b.size[0], b.size[1], b.size[2])
+      dummy.updateMatrix()
+      buildingMeshRef.current!.setMatrixAt(i, dummy.matrix)
+      buildingMeshRef.current!.setColorAt(i, colorObj.set(b.color))
+
+      // 2. Rooftop Trim & Beacon
+      dummy.position.set(b.position[0], b.position[1] + b.size[1] / 2 + 0.5, b.position[2])
+      dummy.scale.set(b.size[0] + 0.4, 0.8, b.size[2] + 0.4)
+      dummy.updateMatrix()
+      windowMeshRef.current!.setMatrixAt(i, dummy.matrix)
+      windowMeshRef.current!.setColorAt(i, colorObj.set(b.windowColor))
+
+      // 3. Antenna
+      if (b.hasAntenna && antennaBaseRef.current && antennaLightRef.current) {
+        dummy.position.set(b.position[0], b.position[1] + b.size[1] / 2 + 6, b.position[2])
+        dummy.scale.set(1, 1, 1)
+        dummy.updateMatrix()
+        antennaBaseRef.current.setMatrixAt(antennaIndex, dummy.matrix)
+
+        dummy.position.set(b.position[0], b.position[1] + b.size[1] / 2 + 12, b.position[2])
+        dummy.scale.set(1, 1, 1)
+        dummy.updateMatrix()
+        antennaLightRef.current.setMatrixAt(antennaIndex, dummy.matrix)
+        
+        antennaIndex++
+      }
+    })
+
+    buildingMeshRef.current.instanceMatrix.needsUpdate = true
+    if (buildingMeshRef.current.instanceColor) buildingMeshRef.current.instanceColor.needsUpdate = true
+    
+    windowMeshRef.current.instanceMatrix.needsUpdate = true
+    if (windowMeshRef.current.instanceColor) windowMeshRef.current.instanceColor.needsUpdate = true
+
+    if (antennaBaseRef.current) antennaBaseRef.current.instanceMatrix.needsUpdate = true
+    if (antennaLightRef.current) antennaLightRef.current.instanceMatrix.needsUpdate = true
+
+  }, [buildings])
+
+  const totalAntennas = buildings.filter(b => b.hasAntenna).length
+
   return (
     <group>
       {/* Sky starfield & atmospheric dust */}
       <StarField count={isLow ? 80 : effectiveQuality === 'medium' ? 250 : 600} />
 
-      {/* Buildings */}
-      {buildings.map((b, i) => (
-        <group key={i} position={b.position}>
-          {/* Main Tower Block */}
-          <mesh>
-            <boxGeometry args={b.size} />
-            {isLow ? (
-              <meshBasicMaterial color={b.color} />
-            ) : (
-              <meshStandardMaterial color={b.color} roughness={0.7} metalness={0.3} />
-            )}
-          </mesh>
+      {/* Instanced Buildings */}
+      <instancedMesh ref={buildingMeshRef} args={[null, null, buildings.length] as any}>
+        <boxGeometry />
+        {isLow ? (
+          <meshBasicMaterial />
+        ) : (
+          <meshStandardMaterial roughness={0.7} metalness={0.3} />
+        )}
+      </instancedMesh>
 
-          {/* Rooftop Trim & Beacon */}
-          <mesh position={[0, b.size[1] / 2 + 0.5, 0]}>
-            <boxGeometry args={[b.size[0] + 0.4, 0.8, b.size[2] + 0.4]} />
-            <meshStandardMaterial
-              color={b.windowColor}
-              emissive={b.windowColor}
-              emissiveIntensity={1.2}
-            />
-          </mesh>
+      <instancedMesh ref={windowMeshRef} args={[null, null, buildings.length] as any}>
+        <boxGeometry />
+        <meshStandardMaterial emissive="#ffffff" emissiveIntensity={1.2} />
+      </instancedMesh>
 
-          {/* Roof Antenna (High only) */}
-          {b.hasAntenna && (
-            <group position={[0, b.size[1] / 2 + 6, 0]}>
-              <mesh>
-                <cylinderGeometry args={[0.2, 0.4, 12, 6]} />
-                <meshStandardMaterial color="#64748b" metalness={0.9} />
-              </mesh>
-              <mesh position={[0, 6, 0]}>
-                <sphereGeometry args={[0.6, 8, 8]} />
-                <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={2} />
-              </mesh>
-            </group>
-          )}
-        </group>
-      ))}
+      {totalAntennas > 0 && (
+        <>
+          <instancedMesh ref={antennaBaseRef} args={[null, null, totalAntennas] as any}>
+            <cylinderGeometry args={[0.2, 0.4, 12, 6]} />
+            <meshStandardMaterial color="#64748b" metalness={0.9} />
+          </instancedMesh>
+          <instancedMesh ref={antennaLightRef} args={[null, null, totalAntennas] as any}>
+            <sphereGeometry args={[0.6, 8, 8]} />
+            <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={2} />
+          </instancedMesh>
+        </>
+      )}
 
       {/* Holographic Mega Billboards */}
       <HoloBillboard position={[0, 25, -90]} rotation={[0, 0, 0]} color="#06b6d4" text={['NEON CITY', 'TURBO SPEED']} />

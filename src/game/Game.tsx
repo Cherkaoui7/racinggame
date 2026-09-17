@@ -8,6 +8,7 @@ import { Track } from './Track'
 import { CityBackdrop } from './CityBackdrop'
 import { HUD } from '../components/HUD'
 import { PerformanceGovernor } from './PerformanceGovernor'
+import { PerformanceMonitor, PerformanceOverlay } from '../components/PerformanceMonitor'
 
 import { useGameStore } from '../store/useGameStore'
 
@@ -23,7 +24,9 @@ const keyboardMap = [
 ]
 
 export function Game() {
-  const { gameId, effectiveQuality, dynamicDpr } = useGameStore()
+  const gameId = useGameStore(s => s.gameId)
+  const effectiveQuality = useGameStore(s => s.effectiveQuality)
+  const dynamicDpr = useGameStore(s => s.dynamicDpr)
 
   const isLow = effectiveQuality === 'low'
   const isHigh = effectiveQuality === 'high'
@@ -46,6 +49,7 @@ export function Game() {
           camera={{ position: [0, 5, 10], fov: 60 }}
         >
           <PerformanceGovernor />
+          <PerformanceMonitor />
           <color attach="background" args={['#060a1a']} />
           
           <ambientLight intensity={1.3} color="#93c5fd" />
@@ -90,6 +94,7 @@ export function Game() {
         </Canvas>
       </KeyboardControls>
       
+      <PerformanceOverlay />
       <HUD />
     </>
   )

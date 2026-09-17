@@ -493,7 +493,7 @@ function StartFinishGantry() {
 }
 
 function CheckpointGates() {
-  const { passRacerCheckpoint } = useGameStore()
+  const passRacerCheckpoint = useGameStore(s => s.passRacerCheckpoint)
 
   const handleIntersection = (e: any, cp: number) => {
     const rb = e.other.rigidBodyObject

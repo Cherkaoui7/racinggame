@@ -6,6 +6,8 @@ export interface RacerProgress {
   checkpoint: number
   finished: boolean
   finishTime: number
+  lapStartTime: number
+  lapTimes: number[]
 }
 
 export interface RacerInfo {
@@ -69,6 +71,9 @@ interface GameState {
   lapTimes: number[]
   totalRaceTime: number | null
   raceStartTime: number
+  topSpeed: number
+  nitroUses: number
+  longestDrift: number
   cameraMode: 'chase' | 'hood' | 'cinematic'
   difficulty: 'easy' | 'medium' | 'hard'
   graphicsQuality: GraphicsOption
@@ -92,6 +97,7 @@ interface GameState {
   setSpeed: (speed: number) => void
   setGear: (gear: number | string) => void
   setNitro: (nitro: number) => void
+  setLongestDrift: (timeSec: number) => void
   passRacerCheckpoint: (name: string, checkpointId: number) => void
   setPlayerRef: (ref: React.MutableRefObject<any>) => void
   addAIRef: (ref: React.MutableRefObject<any>) => void
@@ -146,7 +152,7 @@ function computeLeaderboard(state: GameState): { racers: RacerInfo[], position: 
   const competitors: CompetitorData[] = []
 
   const processRacer = (name: string, isPlayer: boolean, color: string, ref: any) => {
-    const prog = state.racerProgress[name] || { lap: 1, checkpoint: 0, finished: false, finishTime: 0 }
+    const prog = state.racerProgress[name] || { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: state.raceStartTime, lapTimes: [] }
     
     let totalDist = 0
     if (prog.finished) {
@@ -237,14 +243,14 @@ export const useGameStore = create<GameState>((set) => ({
   finishedOrder: [],
   totalRacers: 8,
   racerProgress: {
-    'Cherkaoui': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-    'Shadow': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-    'Neon': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-    'Blaze': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-    'Drift': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-    'Apex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-    'Nova': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-    'Rex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+    'Cherkaoui': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: 0, lapTimes: [] },
+    'Shadow': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: 0, lapTimes: [] },
+    'Neon': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: 0, lapTimes: [] },
+    'Blaze': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: 0, lapTimes: [] },
+    'Drift': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: 0, lapTimes: [] },
+    'Apex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: 0, lapTimes: [] },
+    'Nova': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: 0, lapTimes: [] },
+    'Rex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: 0, lapTimes: [] },
   },
   isGameOver: false,
   nitro: 100,
@@ -256,6 +262,9 @@ export const useGameStore = create<GameState>((set) => ({
   lapTimes: [],
   totalRaceTime: null,
   raceStartTime: 0,
+  topSpeed: 0,
+  nitroUses: 0,
+  longestDrift: 0,
   cameraMode: 'chase',
   difficulty: 'medium',
   graphicsQuality: initialQuality,
@@ -285,27 +294,30 @@ export const useGameStore = create<GameState>((set) => ({
       finalPosition: null,
       finishedOrder: [],
       racerProgress: {
-        'Cherkaoui': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-        'Shadow': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-        'Neon': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-        'Blaze': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-        'Drift': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-        'Apex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-        'Nova': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
-        'Rex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+        'Cherkaoui': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: Date.now(), lapTimes: [] },
+        'Shadow': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: Date.now(), lapTimes: [] },
+        'Neon': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: Date.now(), lapTimes: [] },
+        'Blaze': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: Date.now(), lapTimes: [] },
+        'Drift': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: Date.now(), lapTimes: [] },
+        'Apex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: Date.now(), lapTimes: [] },
+        'Nova': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: Date.now(), lapTimes: [] },
+        'Rex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: Date.now(), lapTimes: [] },
       },
       racers: DEFAULT_RACERS.map((r, i) => ({ ...r, lap: 1, distance: -i * 6, position: i + 1 })),
       aiRefs: [],
       raceStartTime: Date.now(),
-      currentLapStartTime: 0,
+      currentLapStartTime: Date.now(),
       currentLapTime: 0,
       lapTimes: [],
       totalRaceTime: null,
       bestLapTime: null,
+      topSpeed: 0,
+      nitroUses: 0,
+      longestDrift: 0,
     })),
   openGarage: () => set({ gameState: 'garage' }),
   closeGarage: () => set({ gameState: 'menu' }),
-  goToMenu: () => set({ gameState: 'menu', isGameOver: false, isRaceStarted: false, speed: 0, currentLapTime: 0, currentLapStartTime: 0, finalPosition: null, finishedOrder: [], lapTimes: [], totalRaceTime: null, bestLapTime: null }),
+  goToMenu: () => set({ gameState: 'menu', isGameOver: false, isRaceStarted: false, speed: 0, currentLapTime: 0, currentLapStartTime: 0, finalPosition: null, finishedOrder: [], lapTimes: [], totalRaceTime: null, bestLapTime: null, topSpeed: 0, nitroUses: 0, longestDrift: 0 }),
   setIsRaceStarted: (started) => set({ isRaceStarted: started, raceStartTime: started ? Date.now() : 0, currentLapStartTime: started ? Date.now() : 0 }),
   selectCar: (carId) => set({ selectedCar: carId }),
   setPlayerRef: (ref) => set({ playerRef: ref }),
@@ -336,18 +348,30 @@ export const useGameStore = create<GameState>((set) => ({
       return computed
     }),
   setSpeed: (speed) =>
-    set((s) => (Math.round(s.speed) === Math.round(speed) ? s : { speed })),
-  setGear: (gear) => set((s) => (s.gear === gear ? s : { gear })),
+    set((state) => ({ 
+      speed,
+      topSpeed: Math.max(state.topSpeed, speed)
+    })),
+  setGear: (gear) => set({ gear }),
   setNitro: (nitro) =>
     set((s) => {
       const clamped = Math.max(0, Math.min(100, nitro))
-      return Math.round(s.nitro) === Math.round(clamped) ? s : { nitro: clamped }
+      // If nitro decreases (is being used) and was previously near max, or just count usage cycles
+      let newNitroUses = s.nitroUses
+      if (s.nitro > clamped && s.nitro === 100) {
+        newNitroUses += 1
+      }
+      return Math.round(s.nitro) === Math.round(clamped) 
+        ? s 
+        : { nitro: clamped, nitroUses: Math.max(s.nitroUses, newNitroUses) }
     }),
-  updateRaceStatus: (lap, position, checkpoint) =>
+  setLongestDrift: (timeSec) =>
+    set((s) => ({ longestDrift: Math.max(s.longestDrift, timeSec) })),
+  updateRaceStatus: (lap, position) =>
     set({ lap, position }),
   passRacerCheckpoint: (name, cp) =>
     set((state) => {
-      const prog = state.racerProgress[name] || { lap: 1, checkpoint: 0, finished: false, finishTime: 0 }
+      const prog = state.racerProgress[name] || { lap: 1, checkpoint: 0, finished: false, finishTime: 0, lapStartTime: state.raceStartTime, lapTimes: [] }
       if (prog.finished) return state
 
       const newProg = { ...prog }
@@ -361,9 +385,15 @@ export const useGameStore = create<GameState>((set) => ({
           newProg.lap += 1
           newProg.checkpoint = 0
           
-          if (name === 'Cherkaoui' && state.currentLapStartTime > 0) {
-            const now = Date.now()
-            const lapTime = now - state.currentLapStartTime
+          const now = Date.now()
+          const lapStart = newProg.lapStartTime || state.raceStartTime
+          const lapTime = now - lapStart
+          
+          if (!newProg.lapTimes) newProg.lapTimes = []
+          newProg.lapTimes.push(lapTime)
+          newProg.lapStartTime = now
+
+          if (name === 'Cherkaoui') {
             newLapTimes.push(lapTime)
             newCurrentLapStartTime = now
             newBestLapTime = Math.min(...newLapTimes)

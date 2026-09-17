@@ -1,9 +1,10 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { ContactShadows, OrbitControls, useGLTF } from '@react-three/drei'
+import { ContactShadows, OrbitControls } from '@react-three/drei'
 import { useGameStore } from '../store/useGameStore'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useRef, useMemo } from 'react'
+import { useRef } from 'react'
 import * as THREE from 'three'
+import { EnhancedCarModel, CAR_VARIANTS } from '../game/EnhancedCarModel'
 
 const CARS = [
   { id: 'neon', name: 'Neon Sport', color: '#aa3bff', topSpeed: 60, handling: 80, accel: 70 },
@@ -11,40 +12,8 @@ const CARS = [
   { id: 'drift', name: 'Drift King', color: '#3bff65', topSpeed: 55, handling: 95, accel: 65 },
 ]
 
-function CarModel({ color }: { color: string }) {
+function RotatingCar({ variant }: { variant: string }) {
   const group = useRef<THREE.Group>(null)
-  const { scene } = useGLTF('/Mini cooper.glb')
-  
-  const clonedScene = useMemo(() => {
-    const clone = scene.clone(true)
-    const targetColor = new THREE.Color(color)
-    clone.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh
-        if (mesh.material) {
-          const mat = (mesh.material as THREE.Material).clone() as THREE.MeshStandardMaterial
-          mesh.material = mat
-          const name = ((mat.name || '') + ' ' + (mesh.name || '')).toLowerCase()
-          const isExcluded = 
-            name.includes('glass') || 
-            name.includes('window') || 
-            name.includes('tire') || 
-            name.includes('wheel') || 
-            name.includes('interior') || 
-            name.includes('mirror') || 
-            name.includes('light') || 
-            name.includes('rim') ||
-            name.includes('chrome')
-          if (!isExcluded) {
-            mat.color = targetColor
-            mat.roughness = 0.3
-            mat.metalness = 0.7
-          }
-        }
-      }
-    })
-    return clone
-  }, [scene, color])
   
   useFrame((_, delta) => {
     if (group.current) {
@@ -53,14 +22,15 @@ function CarModel({ color }: { color: string }) {
   })
 
   return (
-    <group ref={group}>
-      <primitive object={clonedScene} scale={1.2} position={[0, -0.4, 0]} />
+    <group ref={group} scale={1.2}>
+      <EnhancedCarModel variant={variant as keyof typeof CAR_VARIANTS} />
     </group>
   )
 }
-
 export function Garage() {
-  const { closeGarage, selectedCar, selectCar } = useGameStore()
+  const closeGarage = useGameStore(s => s.closeGarage)
+  const selectedCar = useGameStore(s => s.selectedCar)
+  const selectCar = useGameStore(s => s.selectCar)
   
   const currentIndex = CARS.findIndex(c => c.id === selectedCar)
   const safeIndex = currentIndex >= 0 ? currentIndex : 0
@@ -140,7 +110,7 @@ export function Garage() {
           <spotLight position={[-10, 10, -5]} angle={0.3} penumbra={1} intensity={1.2} color="#38bdf8" />
           <pointLight position={[0, 3, 0]} intensity={1.2} color={currentCarData.color} distance={8} />
           
-          <CarModel color={currentCarData.color} />
+          <RotatingCar variant={currentCarData.id} />
           
           <ContactShadows position={[0, -0.4, 0]} opacity={0.7} scale={10} blur={2} far={4} />
           <OrbitControls enablePan={false} enableZoom={false} minPolarAngle={Math.PI/4} maxPolarAngle={Math.PI/2 - 0.1} />

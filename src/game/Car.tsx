@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber'
-import { useRef, useMemo, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 import { useKeyboardControls, useGLTF } from '@react-three/drei'
 import { RigidBody, RapierRigidBody, CuboidCollider } from '@react-three/rapier'
 import { useGameStore } from '../store/useGameStore'
@@ -9,88 +9,7 @@ import * as THREE from 'three'
 // Preload the Mini Cooper model
 useGLTF.preload('/Mini cooper.glb')
 
-function MiniModel({ color }: { color: string }) {
-  const { scene } = useGLTF('/Mini cooper.glb')
-  const effectiveQuality = useGameStore((state) => state.effectiveQuality)
-  const isLow = effectiveQuality === 'low'
-
-  const clonedScene = useMemo(() => {
-    const clone = scene.clone(true)
-    const targetColor = new THREE.Color(color)
-    clone.traverse((child) => {
-      if (child.name === 'Plane') {
-        child.visible = false
-        return
-      }
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh
-        const mat = mesh.material as THREE.MeshStandardMaterial | undefined
-        const name = ((mat?.name || '') + ' ' + (mesh.name || '')).toLowerCase()
-
-        // Performance Optimization: Cull non-visible interior, engine, suspension, and mechanics across ALL quality levels
-        const isInteriorOrExcess = 
-          name.includes('interior') ||
-          name.includes('seat') ||
-          name.includes('das') ||
-          name.includes('rubber') ||
-          name.includes('brakedi') ||
-          name.includes('hole') ||
-          name.includes('fab') ||
-          name.includes('pedal') ||
-          name.includes('engine') ||
-          name.includes('motor') ||
-          name.includes('suspension') ||
-          name.includes('radiator') ||
-          name.includes('battery') ||
-          name.includes('axle') ||
-          name.includes('chassis') ||
-          name.includes('underbody') ||
-          name.includes('floor')
-
-        if (isInteriorOrExcess) {
-          mesh.visible = false
-          return
-        }
-
-        if (mesh.geometry?.attributes?.position) {
-          const vCount = mesh.geometry.attributes.position.count
-          if (isLow ? vCount < 100 : vCount < 40) {
-            mesh.visible = false
-            return
-          }
-        }
-
-        if (mesh.material) {
-          // STRICT COLOR CLONING: Only clone materials for panels that actually change color!
-          // All 135+ other meshes share the original GLTF material references to eliminate state changes.
-          const isColoredBodyPart = 
-            name.includes('paint') || 
-            name.includes('body') || 
-            name.includes('roof')
-
-          if (isColoredBodyPart) {
-            const bodyMat = (mesh.material as THREE.MeshStandardMaterial).clone()
-            bodyMat.color = targetColor
-            bodyMat.roughness = 0.3
-            bodyMat.metalness = 0.7
-            mesh.material = bodyMat
-          }
-        }
-      }
-    })
-    return clone
-  }, [scene, color, isLow])
-  
-  return (
-    <primitive 
-      object={clonedScene} 
-      scale={1}
-      position={[0, -0.4, 0]} 
-      rotation={[0, Math.PI, 0]}
-    />
-  )
-}
-
+import { EnhancedCarModel, CAR_VARIANTS, type VehicleState } from './EnhancedCarModel'
 const CAR_SPECS = {
   neon: { color: '#7c22ce', mass: 1200, accel: 45.0, topSpeed: 180, handling: 1.5, grip: 6.0 },
   muscle: { color: '#ff3b3b', mass: 1500, accel: 55.0, topSpeed: 200, handling: 1.0, grip: 4.0 },
@@ -166,9 +85,14 @@ export function Car() {
   
   const nitroRef = useRef(100)
   const isNitroRef = useRef(false)
+  
+  const vehicleStateRef = useRef<VehicleState>({ speed: 0, isBraking: false, isNitro: false, steering: 0 })
   const isInitialCameraSet = useRef(false)
+  const driftStartTime = useRef<number | null>(null)
   const lastStoreSync = useRef(0)
   const hasStartedAudio = useRef(false)
+  const steeringValue = useRef(0)
+  const carMeshRef = useRef<THREE.Group>(null)
 
   // Register ref on mount and subscribe to camera & respawn keys
   useEffect(() => {
@@ -329,6 +253,14 @@ export function Car() {
       displayGear = isNitro ? 'N' : currentGearIndex + 1
     }
 
+    // Update vehicle visual state
+    vehicleStateRef.current = {
+      speed: currentSpeed,
+      isBraking: brake,
+      isNitro: isNitroRef.current,
+      steering: steeringValue.current
+    }
+
     const currentGearObj = GEARS[currentGearIndex]
     const maxSpeed = isNitro ? specs.topSpeed + 30 : specs.topSpeed
 
@@ -383,6 +315,22 @@ export function Car() {
       }
     }
     
+    // Drift statistics tracking
+    const isDrifting = Math.abs(latSpeed) > 8.0 && currentSpeed > 10.0
+    if (isDrifting) {
+      if (driftStartTime.current === null) {
+        driftStartTime.current = state.clock.elapsedTime
+      }
+    } else {
+      if (driftStartTime.current !== null) {
+        const driftDuration = state.clock.elapsedTime - driftStartTime.current
+        if (driftDuration > 0.3) {
+          store.setLongestDrift(driftDuration)
+        }
+        driftStartTime.current = null
+      }
+    }
+
     // Arcade Handling: Rotate the velocity vector towards where the car is facing via Impulse (Zero GC allocations)
     if (currentSpeed > 1.0 && isMovingForward) {
       const turnGrip = brake ? grip * 0.3 : grip
@@ -472,8 +420,13 @@ export function Car() {
     >
       <CuboidCollider args={[1, 0.4, 2]} density={specs.mass / 6.4} />
       <group>
-        {/* Car Body (GLTF Model) */}
-        <MiniModel color={specs.color} />
+        <group ref={carMeshRef}>
+          <EnhancedCarModel 
+            variant={selectedCar as keyof typeof CAR_VARIANTS} 
+            isPlayer={true}
+            vehicleStateRef={vehicleStateRef}
+          />
+        </group>
 
         {/* Rear Neon Underglow Bar & Ground Glow */}
         <mesh position={[0, -0.32, 1.45]}>

@@ -69,7 +69,7 @@ export function PerformanceGovernor() {
       }
     }
 
-    const { graphicsQuality, effectiveQuality, setEffectiveQuality, resolutionScale, setResolutionScale, setDynamicDpr } = useGameStore.getState()
+    const { graphicsQuality, effectiveQuality, setEffectiveQuality, setResolutionScale, setDynamicDpr } = useGameStore.getState()
 
     // Dynamic Resolution Scaling (DRS)
     if (graphicsQuality === 'auto' || graphicsQuality === 'high' || graphicsQuality === 'medium') {

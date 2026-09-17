@@ -25,7 +25,8 @@ function getAngleFromQuat(q: { x: number, y: number, z: number, w: number }): nu
 export function Minimap() {
   const playerGroupRef = useRef<SVGGElement>(null)
   const aiGroupRefs = useRef<(SVGGElement | null)[]>([])
-  const { playerRef, aiRefs } = useGameStore()
+  const playerRef = useGameStore(s => s.playerRef)
+  const aiRefs = useGameStore(s => s.aiRefs)
 
   useEffect(() => {
     let animId: number
