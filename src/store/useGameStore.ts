@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import { detectHardware, type HardwareProfile, type GraphicsOption, type QualityPreset } from '../utils/hardwareDetection'
 
+export interface RacerProgress {
+  lap: number
+  checkpoint: number
+  finished: boolean
+  finishTime: number
+}
+
 export interface RacerInfo {
   name: string
   isPlayer: boolean
@@ -11,9 +18,16 @@ export interface RacerInfo {
   isFinished?: boolean
 }
 
+export const CHECKPOINT_DISTANCES: Record<number, number> = {
+  0: 0,
+  1: 25,
+  2: 150,
+  3: 275,
+  4: 400,
+  5: 500,
+}
+
 export function getTrackDistance(x: number, z: number): number {
-  // Centerlines: North (z = -62.5), East (x = 62.5), South (z = 62.5), West (x = -62.5)
-  // Start/Finish line is at x = -25, z = -62.5. Total circuit length = 500m.
   const cx = Math.max(-65, Math.min(65, x))
   const cz = Math.max(-65, Math.min(65, z))
 
@@ -25,26 +39,12 @@ export function getTrackDistance(x: number, z: number): number {
   const minD = Math.min(dN, dE, dS, dW)
 
   if (minD === dN) {
-    // North Straight (Traffic moving East +X towards Turn 1)
-    if (cx >= -25) {
-      return cx + 25 // Post-start line: 0m to 87.5m
-    } else {
-      return 525 + cx // Starting grid / approach: 460m to 500m
-    }
+    if (cx >= -25) return cx + 25
+    else return 525 + cx
   }
-
-  if (minD === dE) {
-    // East Straight (Traffic moving South +Z towards Turn 2)
-    return 150 + cz // 87.5m to 212.5m
-  }
-
-  if (minD === dS) {
-    // South Straight (Traffic moving West -X towards Turn 3)
-    return 275 - cx // 212.5m to 337.5m
-  }
-
-  // West Straight (Traffic moving North -Z towards Turn 4)
-  return 400 - cz // 337.5m to 462.5m
+  if (minD === dE) return 150 + cz
+  if (minD === dS) return 275 - cx
+  return 400 - cz
 }
 
 interface GameState {
@@ -58,21 +58,28 @@ interface GameState {
   finalPosition: number | null
   finishedOrder: string[]
   totalRacers: number
-  targetCheckpoint: number
-  totalCheckpoints: number
+  racerProgress: Record<string, RacerProgress>
   isGameOver: boolean
   nitro: number
   playerRef: React.MutableRefObject<any> | null
   aiRefs: React.MutableRefObject<any>[]
   currentLapTime: number
+  currentLapStartTime: number
   bestLapTime: number | null
+  lapTimes: number[]
+  totalRaceTime: number | null
   raceStartTime: number
   cameraMode: 'chase' | 'hood' | 'cinematic'
   difficulty: 'easy' | 'medium' | 'hard'
   graphicsQuality: GraphicsOption
   effectiveQuality: QualityPreset
   dynamicDpr: number
+  resolutionScale: number
   fps: number
+  showDebug: boolean
+  frameTime: number
+  drawCalls: number
+  triangles: number
   hardwareProfile: HardwareProfile
   isRaceStarted: boolean
   gameId: number
@@ -85,8 +92,7 @@ interface GameState {
   setSpeed: (speed: number) => void
   setGear: (gear: number | string) => void
   setNitro: (nitro: number) => void
-  passCheckpoint: (checkpointId: number) => void
-  completeLap: () => void
+  passRacerCheckpoint: (name: string, checkpointId: number) => void
   setPlayerRef: (ref: React.MutableRefObject<any>) => void
   addAIRef: (ref: React.MutableRefObject<any>) => void
   updateRaceStatus: (lap: number, position: number, checkpoint: number) => void
@@ -97,6 +103,9 @@ interface GameState {
   cycleGraphicsQuality: () => void
   setEffectiveQuality: (q: QualityPreset) => void
   setDynamicDpr: (dpr: number) => void
+  setResolutionScale: (scale: number) => void
+  setShowDebug: (show: boolean) => void
+  setPerfMetrics: (metrics: { frameTime: number; drawCalls: number; triangles: number }) => void
   setFps: (fps: number) => void
   setIsRaceStarted: (started: boolean) => void
 }
@@ -106,7 +115,6 @@ const savedQuality = (typeof localStorage !== 'undefined' ? localStorage.getItem
 const initialQuality: GraphicsOption = savedQuality && ['low', 'medium', 'high', 'auto'].includes(savedQuality) ? savedQuality : 'auto'
 const initialEffective: QualityPreset = initialQuality === 'auto' ? hwProfile.detectedTier : initialQuality
 const initialDpr = initialEffective === 'low' ? 0.8 : initialEffective === 'medium' ? 1.0 : 1.35
-
 
 const DEFAULT_RACERS: RacerInfo[] = [
   { name: 'Cherkaoui', isPlayer: true, color: '#00f0ff', lap: 1, distance: 0, position: 1 },
@@ -119,15 +127,12 @@ const DEFAULT_RACERS: RacerInfo[] = [
   { name: 'Rex', isPlayer: false, color: '#eab308', lap: 1, distance: 0, position: 8 },
 ]
 
-function computeLeaderboard(state: GameState, isPlayerFinishing = false): { racers: RacerInfo[], position: number, finishedOrder: string[], totalRacers: number } | null {
+function computeLeaderboard(state: GameState): { racers: RacerInfo[], position: number, finishedOrder: string[], totalRacers: number } | null {
   if (!state.playerRef?.current) return null
 
   const maxLaps = state.maxLaps
-  const isPlayerDone = isPlayerFinishing || state.isGameOver || state.lap > maxLaps
   const finishedOrder = [...state.finishedOrder]
 
-  // IMPORTANT: Scan AI cars for finish FIRST, before adding the player.
-  // This ensures AI cars that finished before the player get earlier indices in finishedOrder.
   interface CompetitorData {
     name: string
     isPlayer: boolean
@@ -135,93 +140,72 @@ function computeLeaderboard(state: GameState, isPlayerFinishing = false): { race
     lap: number
     distance: number
     isFinished: boolean
+    finishTime: number
   }
 
-  const aiCompetitors: CompetitorData[] = []
+  const competitors: CompetitorData[] = []
 
-  for (let i = 0; i < state.aiRefs.length; i++) {
-    const ref = state.aiRefs[i]
-    if (!ref?.current) continue
-    const body = ref.current as any
-    const pos = body.translation()
-    const aiName = body.__racerName || `AI #${i + 1}`
-    const aiColor = body.__racerColor || '#ef4444'
-    const aiLap = body.__lap || 1
-    const aiIsFinished = aiLap > maxLaps
-
-    // Register AI finish BEFORE registering player finish
-    if (aiIsFinished && !finishedOrder.includes(aiName)) {
-      finishedOrder.push(aiName)
+  const processRacer = (name: string, isPlayer: boolean, color: string, ref: any) => {
+    const prog = state.racerProgress[name] || { lap: 1, checkpoint: 0, finished: false, finishTime: 0 }
+    
+    let totalDist = 0
+    if (prog.finished) {
+      totalDist = maxLaps * 500
+      if (!finishedOrder.includes(name)) finishedOrder.push(name)
+    } else {
+      let rawDist = 0
+      if (ref?.current) {
+        const pos = ref.current.translation()
+        rawDist = getTrackDistance(pos.x, pos.z)
+      }
+      
+      const cpDist = CHECKPOINT_DISTANCES[prog.checkpoint] || 0
+      let localDist = rawDist - cpDist
+      if (localDist < -250) localDist += 500
+      if (localDist > 250) localDist -= 500
+      
+      const nextCpDist = CHECKPOINT_DISTANCES[prog.checkpoint + 1] || 500
+      const maxLocal = nextCpDist - cpDist
+      localDist = Math.max(-50, Math.min(localDist, maxLocal))
+      
+      totalDist = (prog.lap - 1) * 500 + cpDist + localDist
     }
 
-    const aiTrackDist = getTrackDistance(pos.x, pos.z)
-    let aiEffectiveDist = aiTrackDist
-    if (aiLap === 1 && aiTrackDist > 350) {
-      aiEffectiveDist = aiTrackDist - 500
-    }
-    const aiTotalDist = aiIsFinished
-      ? maxLaps * 500
-      : (aiLap - 1) * 500 + aiEffectiveDist
-
-    aiCompetitors.push({
-      name: aiName,
-      isPlayer: false,
-      color: aiColor,
-      lap: Math.min(aiLap, maxLaps),
-      distance: aiTotalDist,
-      isFinished: aiIsFinished,
+    competitors.push({
+      name,
+      isPlayer,
+      color,
+      lap: Math.min(prog.lap, maxLaps),
+      distance: totalDist,
+      isFinished: prog.finished,
+      finishTime: prog.finishTime
     })
   }
 
-  // NOW add the player to finishedOrder (after all AI finishers are already registered)
-  if (isPlayerDone && !finishedOrder.includes('Cherkaoui')) {
-    finishedOrder.push('Cherkaoui')
-  }
+  // Player
+  processRacer('Cherkaoui', true, '#00f0ff', state.playerRef)
 
-  // Calculate Player Distance
-  const pPos = state.playerRef.current.translation()
-  const pTrackDist = getTrackDistance(pPos.x, pPos.z)
+  // AI
+  state.aiRefs.forEach((ref, i) => {
+    if (!ref?.current) return
+    const body = ref.current as any
+    const aiName = body.__racerName || `AI #${i + 1}`
+    const aiColor = body.__racerColor || '#ef4444'
+    processRacer(aiName, false, aiColor, ref)
+  })
 
-  let pEffectiveDist = pTrackDist
-  if (!isPlayerDone && state.lap === 1 && pTrackDist > 350) {
-    pEffectiveDist = pTrackDist - 500
-  }
-  const pTotalDist = isPlayerDone
-    ? maxLaps * 500
-    : (state.lap - 1) * 500 + pEffectiveDist
-
-  const competitors: CompetitorData[] = [
-    {
-      name: 'Cherkaoui',
-      isPlayer: true,
-      color: '#00f0ff',
-      lap: isPlayerDone ? maxLaps : Math.min(state.lap, maxLaps),
-      distance: pTotalDist,
-      isFinished: isPlayerDone,
-    },
-    ...aiCompetitors,
-  ]
-
-  // Sort: Finished racers in order of finish, then unfinished racers by distance descending
+  // Sort: Finished racers by time, unfinished by distance descending
   competitors.sort((a, b) => {
-    const aFinIndex = finishedOrder.indexOf(a.name)
-    const bFinIndex = finishedOrder.indexOf(b.name)
-
-    if (aFinIndex !== -1 && bFinIndex !== -1) {
-      return aFinIndex - bFinIndex
-    }
-    if (aFinIndex !== -1) return -1
-    if (bFinIndex !== -1) return 1
-
+    if (a.isFinished && b.isFinished) return a.finishTime - b.finishTime
+    if (a.isFinished) return -1
+    if (b.isFinished) return 1
     return b.distance - a.distance
   })
 
   let playerPos = 1
   const rankedRacers: RacerInfo[] = competitors.map((c, idx) => {
     const pos = idx + 1
-    if (c.isPlayer) {
-      playerPos = pos
-    }
+    if (c.isPlayer) playerPos = pos
     return {
       name: c.name,
       isPlayer: c.isPlayer,
@@ -237,7 +221,7 @@ function computeLeaderboard(state: GameState, isPlayerFinishing = false): { race
     racers: rankedRacers,
     position: playerPos,
     finishedOrder,
-    totalRacers: rankedRacers.length,
+    totalRacers: competitors.length,
   }
 }
 
@@ -252,21 +236,37 @@ export const useGameStore = create<GameState>((set) => ({
   finalPosition: null,
   finishedOrder: [],
   totalRacers: 8,
-  targetCheckpoint: 1,
-  totalCheckpoints: 4,
+  racerProgress: {
+    'Cherkaoui': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+    'Shadow': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+    'Neon': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+    'Blaze': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+    'Drift': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+    'Apex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+    'Nova': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+    'Rex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+  },
   isGameOver: false,
   nitro: 100,
   playerRef: null,
   aiRefs: [],
   currentLapTime: 0,
+  currentLapStartTime: 0,
   bestLapTime: null,
+  lapTimes: [],
+  totalRaceTime: null,
   raceStartTime: 0,
   cameraMode: 'chase',
   difficulty: 'medium',
   graphicsQuality: initialQuality,
   effectiveQuality: initialEffective,
   dynamicDpr: initialDpr,
+  resolutionScale: 1.0,
   fps: 60,
+  showDebug: false,
+  frameTime: 16.6,
+  drawCalls: 0,
+  triangles: 0,
   hardwareProfile: hwProfile,
   isRaceStarted: false,
   gameId: 0,
@@ -278,22 +278,35 @@ export const useGameStore = create<GameState>((set) => ({
       isRaceStarted: false,
       gameId: state.gameId + 1,
       lap: 1,
-      targetCheckpoint: 1,
       nitro: 100,
       gear: 1,
       speed: 0,
       position: 1,
       finalPosition: null,
       finishedOrder: [],
+      racerProgress: {
+        'Cherkaoui': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+        'Shadow': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+        'Neon': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+        'Blaze': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+        'Drift': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+        'Apex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+        'Nova': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+        'Rex': { lap: 1, checkpoint: 0, finished: false, finishTime: 0 },
+      },
       racers: DEFAULT_RACERS.map((r, i) => ({ ...r, lap: 1, distance: -i * 6, position: i + 1 })),
       aiRefs: [],
       raceStartTime: Date.now(),
+      currentLapStartTime: 0,
       currentLapTime: 0,
+      lapTimes: [],
+      totalRaceTime: null,
+      bestLapTime: null,
     })),
   openGarage: () => set({ gameState: 'garage' }),
   closeGarage: () => set({ gameState: 'menu' }),
-  goToMenu: () => set({ gameState: 'menu', isGameOver: false, isRaceStarted: false, speed: 0, currentLapTime: 0, finalPosition: null, finishedOrder: [] }),
-  setIsRaceStarted: (started) => set({ isRaceStarted: started, raceStartTime: started ? Date.now() : 0 }),
+  goToMenu: () => set({ gameState: 'menu', isGameOver: false, isRaceStarted: false, speed: 0, currentLapTime: 0, currentLapStartTime: 0, finalPosition: null, finishedOrder: [], lapTimes: [], totalRaceTime: null, bestLapTime: null }),
+  setIsRaceStarted: (started) => set({ isRaceStarted: started, raceStartTime: started ? Date.now() : 0, currentLapStartTime: started ? Date.now() : 0 }),
   selectCar: (carId) => set({ selectedCar: carId }),
   setPlayerRef: (ref) => set({ playerRef: ref }),
   addAIRef: (ref) =>
@@ -303,7 +316,7 @@ export const useGameStore = create<GameState>((set) => ({
     }),
   updateLeaderboard: () =>
     set((state) => {
-      const computed = computeLeaderboard(state, false)
+      const computed = computeLeaderboard(state)
       if (!computed) return state
       // Skip re-render if positions haven't actually changed
       const oldRacers = state.racers
@@ -313,7 +326,7 @@ export const useGameStore = create<GameState>((set) => ({
           && computed.finishedOrder.length === state.finishedOrder.length) {
         let same = true
         for (let i = 0; i < oldRacers.length; i++) {
-          if (oldRacers[i].position !== newRacers[i].position || oldRacers[i].lap !== newRacers[i].lap) {
+          if (oldRacers[i].name !== newRacers[i].name || oldRacers[i].lap !== newRacers[i].lap) {
             same = false
             break
           }
@@ -331,49 +344,68 @@ export const useGameStore = create<GameState>((set) => ({
       return Math.round(s.nitro) === Math.round(clamped) ? s : { nitro: clamped }
     }),
   updateRaceStatus: (lap, position, checkpoint) =>
-    set({ lap, position, targetCheckpoint: checkpoint }),
-  passCheckpoint: (checkpointId) =>
+    set({ lap, position }),
+  passRacerCheckpoint: (name, cp) =>
     set((state) => {
-      if (checkpointId === state.targetCheckpoint) {
-        if (checkpointId === state.totalCheckpoints) {
-          // Last checkpoint passed -> next step is crossing the Start/Finish line (checkpoint 0)
-          return { targetCheckpoint: 0 }
-        }
-        return { targetCheckpoint: checkpointId + 1 }
-      }
-      return state
-    }),
-  completeLap: () =>
-    set((state) => {
-      if (state.targetCheckpoint === 0) {
-        const now = Date.now()
-        const lapDuration = (now - state.raceStartTime) / 1000
-        const newBest =
-          state.bestLapTime === null
-            ? lapDuration
-            : Math.min(state.bestLapTime, lapDuration)
+      const prog = state.racerProgress[name] || { lap: 1, checkpoint: 0, finished: false, finishTime: 0 }
+      if (prog.finished) return state
 
-        if (state.lap >= state.maxLaps) {
-          const computed = computeLeaderboard(state, true)
-          const finalPos = computed ? computed.position : state.position
-          return {
-            isGameOver: true,
-            targetCheckpoint: 1,
-            bestLapTime: newBest,
-            position: finalPos,
-            finalPosition: finalPos,
-            finishedOrder: computed ? computed.finishedOrder : state.finishedOrder,
-            racers: computed ? computed.racers : state.racers,
+      const newProg = { ...prog }
+      let newBestLapTime = state.bestLapTime
+      let newCurrentLapStartTime = state.currentLapStartTime
+      let newLapTimes = [...state.lapTimes]
+      let newTotalRaceTime = state.totalRaceTime
+
+      if (cp === 5) {
+        if (prog.checkpoint === 4) {
+          newProg.lap += 1
+          newProg.checkpoint = 0
+          
+          if (name === 'Cherkaoui' && state.currentLapStartTime > 0) {
+            const now = Date.now()
+            const lapTime = now - state.currentLapStartTime
+            newLapTimes.push(lapTime)
+            newCurrentLapStartTime = now
+            newBestLapTime = Math.min(...newLapTimes)
+          }
+
+          if (newProg.lap > state.maxLaps) {
+            newProg.finished = true
+            newProg.finishTime = Date.now()
+            
+            if (name === 'Cherkaoui') {
+              newTotalRaceTime = newLapTimes.reduce((acc, curr) => acc + curr, 0)
+            }
           }
         }
-        return {
-          lap: state.lap + 1,
-          targetCheckpoint: 1,
-          raceStartTime: now,
-          bestLapTime: newBest,
-        }
+      } else if (cp === prog.checkpoint + 1) {
+        newProg.checkpoint = cp
+      } else {
+        return state
       }
-      return state
+
+      const newRacerProgress = { ...state.racerProgress, [name]: newProg }
+      
+      let isGameOver = state.isGameOver
+      if (name === 'Cherkaoui' && newProg.finished) {
+        isGameOver = true
+      }
+
+      // Update the global state.lap based on player's lap to keep HUD sync
+      let globalLap = state.lap
+      if (name === 'Cherkaoui') {
+        globalLap = newProg.finished ? state.maxLaps : newProg.lap
+      }
+
+      return { 
+        racerProgress: newRacerProgress, 
+        isGameOver, 
+        lap: globalLap,
+        bestLapTime: newBestLapTime,
+        currentLapStartTime: newCurrentLapStartTime,
+        lapTimes: newLapTimes,
+        totalRaceTime: newTotalRaceTime
+      }
     }),
   cycleCamera: () => set((state) => {
     const modes: ('chase' | 'hood' | 'cinematic')[] = ['chase', 'hood', 'cinematic']
@@ -412,6 +444,9 @@ export const useGameStore = create<GameState>((set) => ({
   }),
   setEffectiveQuality: (effectiveQuality) => set({ effectiveQuality }),
   setDynamicDpr: (dynamicDpr) => set({ dynamicDpr }),
+  setResolutionScale: (scale) => set({ resolutionScale: scale }),
+  setShowDebug: (show) => set({ showDebug: show }),
+  setPerfMetrics: (metrics) => set({ frameTime: metrics.frameTime, drawCalls: metrics.drawCalls, triangles: metrics.triangles }),
   setFps: (fps) => set((s) => (s.fps === fps ? s : { fps })),
 }))
 

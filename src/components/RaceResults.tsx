@@ -1,8 +1,9 @@
 import { useGameStore } from '../store/useGameStore'
+import { formatRaceTime } from '../utils/time'
 import { Trophy, Clock, Flag, ChevronRight, Award } from 'lucide-react'
 
 export function RaceResults() {
-  const { position, finalPosition, totalRacers, bestLapTime, racers, startGame, goToMenu } = useGameStore()
+  const { position, finalPosition, totalRacers, bestLapTime, totalRaceTime, racers, startGame, goToMenu } = useGameStore()
   const displayPos = finalPosition || position
   const isWinner = displayPos === 1
   const isPodium = displayPos <= 3
@@ -10,7 +11,7 @@ export function RaceResults() {
   return (
     <div className="absolute inset-0 bg-[#020612]/94 flex flex-col items-center overflow-y-auto p-3 sm:p-6 backdrop-blur-2xl z-50 font-sans pointer-events-auto">
       
-      <div className="flex flex-col items-center animate-fade-in-up w-full max-w-lg m-auto py-2">
+      <div className="flex flex-col items-center animate-fade-in-up w-full max-w-xl m-auto py-2">
         {isWinner ? (
           <div className="relative">
             <Trophy size={48} className="text-yellow-400 mb-1 drop-shadow-[0_0_20px_rgba(250,204,21,0.8)] animate-bounce" />
@@ -38,7 +39,7 @@ export function RaceResults() {
 
         {/* Primary Stats Panel */}
         <div className="w-full bg-[#070e20]/85 border border-cyan-500/30 rounded-2xl p-3.5 sm:p-4 mt-3 sm:mt-4 backdrop-blur-md shadow-2xl">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             
             <div className="flex flex-col bg-white/5 border border-white/10 rounded-xl p-2.5 sm:p-3">
               <span className="text-gray-400 font-bold tracking-widest uppercase text-[10px]">Final Position</span>
@@ -55,8 +56,18 @@ export function RaceResults() {
                 <Clock size={12} className="text-emerald-400" />
                 Best Lap
               </span>
-              <div className="text-2xl sm:text-3xl font-mono font-bold text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.4)] mt-1">
-                {bestLapTime ? bestLapTime.toFixed(2) + 's' : '--'}
+              <div className="text-xl sm:text-2xl font-mono font-bold text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.4)] mt-1 tracking-tight">
+                {formatRaceTime(bestLapTime)}
+              </div>
+            </div>
+
+            <div className="flex flex-col bg-white/5 border border-white/10 rounded-xl p-2.5 sm:p-3">
+              <span className="text-gray-400 font-bold tracking-widest uppercase text-[10px] flex items-center gap-1.5">
+                <Clock size={12} className="text-blue-400" />
+                Total Time
+              </span>
+              <div className="text-xl sm:text-2xl font-mono font-bold text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.4)] mt-1 tracking-tight">
+                {formatRaceTime(totalRaceTime)}
               </div>
             </div>
 

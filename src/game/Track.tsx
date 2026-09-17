@@ -1,7 +1,7 @@
 import { useRef, useLayoutEffect } from 'react'
 import * as THREE from 'three'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
-import { Text } from '@react-three/drei'
+import { Text, Instances, Instance } from '@react-three/drei'
 import { useGameStore } from '../store/useGameStore'
 
 export function Track() {
@@ -80,32 +80,28 @@ function AsphaltRoadway() {
       </mesh>
 
       {/* Center Dashed Lines - North & South */}
-      {[-55, -35, -15, 5, 25, 45].map((x) => (
-        <mesh key={`dash-n-${x}`} position={[x, 0.02, -62.5]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[10, 0.4]} />
-          <meshBasicMaterial color="#e2e8f0" transparent opacity={0.7} />
-        </mesh>
-      ))}
-      {[-55, -35, -15, 5, 25, 45].map((x) => (
-        <mesh key={`dash-s-${x}`} position={[x, 0.02, 62.5]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[10, 0.4]} />
-          <meshBasicMaterial color="#e2e8f0" transparent opacity={0.7} />
-        </mesh>
-      ))}
+      <Instances limit={24}>
+        <planeGeometry args={[10, 0.4]} />
+        <meshBasicMaterial color="#e2e8f0" transparent opacity={0.7} />
+        {[-55, -35, -15, 5, 25, 45].map((x) => (
+          <Instance key={`dash-n-${x}`} position={[x, 0.02, -62.5]} rotation={[-Math.PI / 2, 0, 0]} />
+        ))}
+        {[-55, -35, -15, 5, 25, 45].map((x) => (
+          <Instance key={`dash-s-${x}`} position={[x, 0.02, 62.5]} rotation={[-Math.PI / 2, 0, 0]} />
+        ))}
+      </Instances>
 
       {/* Center Dashed Lines - East & West */}
-      {[-55, -35, -15, 5, 25, 45].map((z) => (
-        <mesh key={`dash-e-${z}`} position={[62.5, 0.02, z]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[0.4, 10]} />
-          <meshBasicMaterial color="#e2e8f0" transparent opacity={0.7} />
-        </mesh>
-      ))}
-      {[-55, -35, -15, 5, 25, 45].map((z) => (
-        <mesh key={`dash-w-${z}`} position={[-62.5, 0.02, z]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[0.4, 10]} />
-          <meshBasicMaterial color="#e2e8f0" transparent opacity={0.7} />
-        </mesh>
-      ))}
+      <Instances limit={24}>
+        <planeGeometry args={[0.4, 10]} />
+        <meshBasicMaterial color="#e2e8f0" transparent opacity={0.7} />
+        {[-55, -35, -15, 5, 25, 45].map((z) => (
+          <Instance key={`dash-e-${z}`} position={[62.5, 0.02, z]} rotation={[-Math.PI / 2, 0, 0]} />
+        ))}
+        {[-55, -35, -15, 5, 25, 45].map((z) => (
+          <Instance key={`dash-w-${z}`} position={[-62.5, 0.02, z]} rotation={[-Math.PI / 2, 0, 0]} />
+        ))}
+      </Instances>
     </group>
   )
 }
@@ -121,23 +117,31 @@ function CornerCurbs() {
 
   return (
     <group>
-      {apexes.map((apex, i) => (
-        <group key={i} position={apex.pos as [number, number, number]} rotation={apex.rot as [number, number, number]}>
-          {Array.from({ length: 12 }).map((_, j) => {
-            const isRed = j % 2 === 0
-            return (
-              <mesh key={j} position={[(j - 6) * 1.5, 0, 0]}>
-                <boxGeometry args={[1.3, 0.15, 2.5]} />
-                <meshStandardMaterial
-                  color={isRed ? '#ef4444' : '#f8fafc'}
-                  emissive={isRed ? '#ef4444' : '#000000'}
-                  emissiveIntensity={isRed ? 0.3 : 0}
-                />
-              </mesh>
-            )
-          })}
-        </group>
-      ))}
+      {/* Red curbs */}
+      <Instances limit={24}>
+        <boxGeometry args={[1.3, 0.15, 2.5]} />
+        <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.3} />
+        {apexes.map((apex, i) => (
+          <group key={`red-${i}`} position={apex.pos as [number, number, number]} rotation={apex.rot as [number, number, number]}>
+            {Array.from({ length: 12 }).filter((_, j) => j % 2 === 0).map((_, j) => (
+              <Instance key={j} position={[(j * 2 - 6) * 1.5, 0, 0]} />
+            ))}
+          </group>
+        ))}
+      </Instances>
+
+      {/* White curbs */}
+      <Instances limit={24}>
+        <boxGeometry args={[1.3, 0.15, 2.5]} />
+        <meshStandardMaterial color="#f8fafc" emissive="#000000" emissiveIntensity={0} />
+        {apexes.map((apex, i) => (
+          <group key={`white-${i}`} position={apex.pos as [number, number, number]} rotation={apex.rot as [number, number, number]}>
+            {Array.from({ length: 12 }).filter((_, j) => j % 2 !== 0).map((_, j) => (
+              <Instance key={j} position={[((j * 2 + 1) - 6) * 1.5, 0, 0]} />
+            ))}
+          </group>
+        ))}
+      </Instances>
     </group>
   )
 }
@@ -489,17 +493,25 @@ function StartFinishGantry() {
 }
 
 function CheckpointGates() {
-  const { passCheckpoint, completeLap } = useGameStore()
+  const { passRacerCheckpoint } = useGameStore()
 
   const handleIntersection = (e: any, cp: number) => {
-    if (e.other.rigidBodyObject?.name === 'player') {
-      passCheckpoint(cp)
+    const rb = e.other.rigidBodyObject
+    if (!rb) return
+    let name = rb.name || rb.__racerName
+    if (name === 'player') name = 'Cherkaoui'
+    if (name) {
+      passRacerCheckpoint(name, cp)
     }
   }
 
   const handleFinishLine = (e: any) => {
-    if (e.other.rigidBodyObject?.name === 'player') {
-      completeLap()
+    const rb = e.other.rigidBodyObject
+    if (!rb) return
+    let name = rb.name || rb.__racerName
+    if (name === 'player') name = 'Cherkaoui'
+    if (name) {
+      passRacerCheckpoint(name, 5) // 5 represents finish line
     }
   }
 

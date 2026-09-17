@@ -5,6 +5,7 @@ import { Countdown } from './Countdown'
 import { RaceResults } from './RaceResults'
 import { RaceTimer } from './RaceTimer'
 import { Minimap } from './MinimapTracker'
+import { PerformancePanel } from './PerformancePanel'
 import { Camera, Zap, Monitor, Activity } from 'lucide-react'
 
 // 1. Lap Counter
@@ -122,7 +123,7 @@ const Leaderboard = memo(function Leaderboard() {
         return (
           <div 
             key={racer.name} 
-            className={`flex items-center gap-2 px-2.5 py-1 rounded transition-all duration-300 ${
+            className={`flex items-center gap-2 px-2.5 py-1 rounded transition-all duration-500 ${
               isPlayer 
                 ? 'bg-cyan-500/25 border border-cyan-400/50 shadow-[0_0_10px_rgba(6,182,212,0.4)]' 
                 : isFirst 
@@ -251,6 +252,8 @@ export function HUD() {
         
         {/* Dynamic Leaderboard */}
         <Leaderboard />
+
+
       </div>
 
       {/* TOP RIGHT: Position & Time */}
@@ -269,7 +272,8 @@ export function HUD() {
         <Minimap />
         <NitroMeter />
       </div>
-      
+
+      <PerformancePanel />
     </div>
   )
 }

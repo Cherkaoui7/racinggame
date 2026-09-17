@@ -204,10 +204,14 @@ export function AICar({
   const maxSpeed = 175 * speedMultiplier * diffMult
   const grip = 6.0
 
-  useFrame((_, delta) => {
+  const frameCount = useRef(0)
+
+  useFrame((state, delta) => {
     if (!bodyRef.current) return
     const isRaceStarted = useGameStore.getState().isRaceStarted
     if (!isRaceStarted) return
+
+    frameCount.current++
 
     try {
       const { posVector, targetPos, directionToTarget, quaternion, forwardVector, rightVector,
@@ -215,10 +219,23 @@ export function AICar({
         aiDesiredVel, aiHorizontalVel, aiVelocityDiff, trackTangent, trackNormal,
         toWpVec, recoverDir } = scratch
 
-      const wp = CIRCUIT_WAYPOINTS[currentWaypoint.current]
-      const nextWp = CIRCUIT_WAYPOINTS[(currentWaypoint.current + 1) % CIRCUIT_WAYPOINTS.length]
       const currentPos = bodyRef.current.translation()
       posVector.set(currentPos.x, currentPos.y, currentPos.z)
+
+      // LOD Physics Culling: Reduce tick rate for distant cars
+      const distSqToCamera = posVector.distanceToSquared(state.camera.position)
+      let effectiveDelta = delta
+
+      if (distSqToCamera > 10000) { // ~100m away
+        if (frameCount.current % 3 !== 0) return // 20 FPS physics
+        effectiveDelta *= 3
+      } else if (distSqToCamera > 4000) { // ~63m away
+        if (frameCount.current % 2 !== 0) return // 30 FPS physics
+        effectiveDelta *= 2
+      }
+
+      const wp = CIRCUIT_WAYPOINTS[currentWaypoint.current]
+      const nextWp = CIRCUIT_WAYPOINTS[(currentWaypoint.current + 1) % CIRCUIT_WAYPOINTS.length]
 
       // Physical Start/Finish line crossing detection at x = -25 moving East (+X) on the North straight
       const prevX = prevXRef.current
@@ -359,33 +376,23 @@ export function AICar({
         }
       }
 
-      const safeDelta = Math.min(delta, 0.08)
       const mass = bodyRef.current.mass()
 
       // Unstuck auto-recovery
       if (isRaceStarted && currentSpeed < 1.2) {
-        stuckTimer.current += delta
+        stuckTimer.current += effectiveDelta
         if (stuckTimer.current > 2.5) {
           const targetWp = CIRCUIT_WAYPOINTS[currentWaypoint.current]
           const nextWpObj = CIRCUIT_WAYPOINTS[(currentWaypoint.current + 1) % CIRCUIT_WAYPOINTS.length]
-          recoverDir.subVectors(nextWpObj.pos, targetWp.pos).setY(0).normalize()
-          const rotY = Math.atan2(recoverDir.x, recoverDir.z)
-
-          bodyRef.current.setTranslation({ x: targetWp.pos.x, y: 0.8, z: targetWp.pos.z }, true)
-          bodyRef.current.setRotation(quaternion.setFromAxisAngle(forwardVector.set(0, 1, 0), rotY), true)
-          bodyRef.current.setLinvel({ x: recoverDir.x * 12, y: 0, z: recoverDir.z * 12 }, true)
-          bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
+          recoverDir.subVectors(nextWpObj.pos, targetWp.pos).normalize()
+          const recoverPos = { x: targetWp.pos.x, y: 0.8, z: targetWp.pos.z }
+          bodyRef.current.setTranslation(recoverPos, true)
+          bodyRef.current.setLinvel({ x: recoverDir.x * 10, y: 0, z: recoverDir.z * 10 }, true)
           stuckTimer.current = 0
         }
       } else {
         stuckTimer.current = 0
       }
-
-      // Apply forward / brake impulse
-      force.copy(forwardVector).multiplyScalar(engineAccel * mass * safeDelta)
-      const downforce = Math.min(currentSpeed * 30, mass * 1.5) * safeDelta
-      force.y -= downforce
-      bodyRef.current.applyImpulse(force, true)
 
       // Apply steering torque
       const canSteer = currentSpeed > 0.4 || isRaceStarted
@@ -393,8 +400,14 @@ export function AICar({
         const speedFactor = Math.max(0.65, 1 - (currentSpeed / 120))
         const panicMultiplier = Math.abs(angleDiff) > 0.35 ? 2.2 : 1.0
         torque.set(0, steerValue * turnSpeed * panicMultiplier * speedFactor * mass * 3.2, 0)
-        bodyRef.current.applyTorqueImpulse(torque.multiplyScalar(safeDelta * 2), true)
+        bodyRef.current.applyTorqueImpulse(torque.multiplyScalar(effectiveDelta * 2), true)
       }
+
+      // Apply forward / brake impulse
+      force.copy(forwardVector).multiplyScalar(engineAccel * mass * effectiveDelta)
+      const downforce = Math.min(currentSpeed * 30, mass * 1.5) * effectiveDelta
+      force.y -= downforce
+      bodyRef.current.applyImpulse(force, true)
 
       // Lateral grip impulse
       if (currentSpeed > 0.5) {
@@ -402,12 +415,12 @@ export function AICar({
         aiHorizontalVel.set(currentVelocity.x, 0, currentVelocity.z)
 
         aiVelocityDiff.subVectors(aiDesiredVel, aiHorizontalVel)
-        const correctionImpulse = aiVelocityDiff.multiplyScalar(grip * safeDelta * mass)
+        const correctionImpulse = aiVelocityDiff.multiplyScalar(grip * effectiveDelta * mass)
         bodyRef.current.applyImpulse(correctionImpulse, true)
       }
 
       // Drag
-      const dragRatio = Math.min(0.2, 0.0036 * currentSpeed * safeDelta * 3)
+      const dragRatio = Math.min(0.2, 0.0036 * currentSpeed * effectiveDelta * 3)
       dragImpulse.copy(currentVelocity).multiplyScalar(-dragRatio * mass)
       bodyRef.current.applyImpulse(dragImpulse, true)
     } catch {
@@ -415,9 +428,19 @@ export function AICar({
     }
   })
 
+  useEffect(() => {
+    if (bodyRef.current) {
+      addAIRef(bodyRef)
+      const body = bodyRef.current as any
+      body.__racerName = name
+      body.__racerColor = color
+    }
+  }, [addAIRef, name, color])
+
   return (
     <RigidBody
       ref={bodyRef}
+      name={name}
       position={initialPosition}
       rotation={[0, -Math.PI / 2, 0]} // Face +X direction
       angularDamping={4}

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useGameStore } from '../store/useGameStore'
+import { formatRaceTime } from '../utils/time'
 import { Timer } from 'lucide-react'
 
 export function RaceTimer() {
@@ -34,13 +35,7 @@ export function RaceTimer() {
     }
   }, [])
 
-  const formatBestTime = (timeInSecs: number | null) => {
-    if (timeInSecs === null) return '--:--.---'
-    const mins = Math.floor(timeInSecs / 60)
-    const secs = Math.floor(timeInSecs % 60)
-    const ms = Math.floor((timeInSecs % 1) * 1000)
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`
-  }
+  // We use formatRaceTime from utils
 
   return (
     <div className="relative mt-1">
@@ -72,7 +67,7 @@ export function RaceTimer() {
             BEST
           </span>
           <span className="text-white/40 text-xs font-mono font-bold tracking-wider">
-            {formatBestTime(bestLapTime)}
+            {formatRaceTime(bestLapTime)}
           </span>
         </div>
 

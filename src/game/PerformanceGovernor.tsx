@@ -17,8 +17,13 @@ export function PerformanceGovernor() {
   const sumFrameTimes = useRef(0)
 
   const lastFpsUpdate = useRef(0)
+  const lastPerfMetricsUpdate = useRef(0)
   const lastGovernorCheck = useRef(0)
   const lastLeaderboardUpdate = useRef(0)
+  
+  // DRS State
+  const currentResolutionScale = useRef(1.0)
+  const drsLastChange = useRef(0)
 
   useFrame((state, delta) => {
     (window as any).__threeGl = state.gl
@@ -52,17 +57,62 @@ export function PerformanceGovernor() {
       useGameStore.getState().updateLeaderboard()
     }
 
-    // Governor only steps down visual tier ONCE if FPS is severely struggling for a sustained period (> 4 seconds)
-    const { graphicsQuality, effectiveQuality, setEffectiveQuality } = useGameStore.getState()
+    // Update Debug Performance metrics (throttled to 250ms)
+    if (state.clock.elapsedTime - lastPerfMetricsUpdate.current > 0.25) {
+      lastPerfMetricsUpdate.current = state.clock.elapsedTime
+      if (useGameStore.getState().showDebug) {
+        useGameStore.getState().setPerfMetrics({
+          frameTime: avgDelta * 1000,
+          drawCalls: state.gl.info.render.calls,
+          triangles: state.gl.info.render.triangles
+        })
+      }
+    }
 
-    if (graphicsQuality === 'auto' && state.clock.elapsedTime - lastGovernorCheck.current > 4.0 && samplesRecorded.current >= 60) {
+    const { graphicsQuality, effectiveQuality, setEffectiveQuality, resolutionScale, setResolutionScale, setDynamicDpr } = useGameStore.getState()
+
+    // Dynamic Resolution Scaling (DRS)
+    if (graphicsQuality === 'auto' || graphicsQuality === 'high' || graphicsQuality === 'medium') {
+      // Allow DRS adjustments every 1 second
+      if (state.clock.elapsedTime - drsLastChange.current > 1.0 && samplesRecorded.current >= 60) {
+        let targetScale = currentResolutionScale.current
+
+        if (currentFps < 40) {
+          // Drop resolution if struggling
+          targetScale = Math.max(0.6, currentResolutionScale.current - 0.1)
+        } else if (currentFps > 55) {
+          // Recover resolution if doing well
+          targetScale = Math.min(1.0, currentResolutionScale.current + 0.05)
+        }
+
+        if (targetScale !== currentResolutionScale.current) {
+          currentResolutionScale.current = targetScale
+          drsLastChange.current = state.clock.elapsedTime
+          
+          // Apply new scale to DPR
+          const baseDpr = effectiveQuality === 'low' ? 0.8 : effectiveQuality === 'medium' ? 1.0 : 1.35
+          setDynamicDpr(baseDpr * targetScale)
+          setResolutionScale(targetScale)
+        }
+      }
+    }
+
+    // Governor tier step-down (Auto quality only)
+    if (graphicsQuality === 'auto' && state.clock.elapsedTime - lastGovernorCheck.current > 5.0 && samplesRecorded.current >= 60) {
       lastGovernorCheck.current = state.clock.elapsedTime
 
-      if (currentFps < 35) {
+      // If we are at max DRS drop and STILL struggling, downgrade tier
+      if (currentFps < 35 && currentResolutionScale.current <= 0.7) {
         if (effectiveQuality === 'high') {
           setEffectiveQuality('medium')
+          currentResolutionScale.current = 1.0 // Reset scale for new tier
+          setDynamicDpr(1.0)
+          setResolutionScale(1.0)
         } else if (effectiveQuality === 'medium') {
           setEffectiveQuality('low')
+          currentResolutionScale.current = 1.0
+          setDynamicDpr(0.8)
+          setResolutionScale(1.0)
         }
       }
     }
