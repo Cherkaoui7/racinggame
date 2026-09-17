@@ -22,6 +22,7 @@ type CarVariant = keyof typeof CAR_VARIANTS
 export interface VehicleState {
   speed: number
   isBraking: boolean
+  isReversing?: boolean
   isNitro: boolean
   steering: number
 }
@@ -87,6 +88,19 @@ const materialsCache = {
   })
 }
 
+// Procedural Geometry Cache (Created ONCE to prevent memory leaks)
+// Scaled perfectly to the Mini cooper GLB
+const geometryCache = {
+  // Spoiler (GT Wing style)
+  spoilerBase: new THREE.BoxGeometry(1.2, 0.03, 0.2),
+  spoilerStand: new THREE.BoxGeometry(0.04, 0.2, 0.1),
+  spoilerWinglet: new THREE.BoxGeometry(0.02, 0.15, 0.25),
+  
+  // Splitter (Front Lip)
+  splitterFront: new THREE.BoxGeometry(1.3, 0.03, 0.3),
+  splitterSide: new THREE.BoxGeometry(0.04, 0.08, 0.3),
+}
+
 export function EnhancedCarModel({ 
   color,
   variant = 'neon', 
@@ -97,6 +111,8 @@ export function EnhancedCarModel({
   const { scene } = useGLTF('/Mini cooper.glb')
   const effectiveQuality = useGameStore((state) => state.effectiveQuality)
   const isLow = effectiveQuality === 'low'
+  const equippedSpoiler = useGameStore((state) => state.equippedSpoiler)
+  const equippedSplitter = useGameStore((state) => state.equippedSplitter)
 
   const config = CAR_VARIANTS[variant as CarVariant] || CAR_VARIANTS.neon
   const targetBodyColor = color ? new THREE.Color(color) : new THREE.Color(config.bodyColor)
@@ -163,7 +179,9 @@ export function EnhancedCarModel({
           return
         }
 
-        if (mesh.geometry?.attributes?.position) {
+        const isEssential = name.includes('tail_light') || name.includes('headlight') || name.includes('glass') || name.includes('window')
+
+        if (mesh.geometry?.attributes?.position && !isEssential) {
           const vCount = mesh.geometry.attributes.position.count
           if (isLow ? vCount < 120 : vCount < 70) {
             mesh.visible = false
@@ -236,12 +254,23 @@ export function EnhancedCarModel({
 
     // 1. Dynamic Brake Lights
     if (carVisualFeatures.enhancedLights && brakeLightRefs.current.length > 0) {
-      const targetBrakeIntensity = isBraking ? 5.0 : 1.0
+      const isReversing = state?.isReversing || false
+      
+      const targetBrakeIntensity = isReversing ? 2.0 : (isBraking ? 5.0 : 1.0)
+      
       // Since all tail lights on a car share the same material, we only update the tracked mesh's material once!
       brakeLightRefs.current.forEach(mesh => {
         if (mesh.material) {
            const mat = mesh.material as THREE.MeshStandardMaterial
            mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetBrakeIntensity, delta * 15)
+           
+           if (isReversing) {
+             mat.color.lerp(new THREE.Color('#aaaaaa'), delta * 15)
+             mat.emissive.lerp(new THREE.Color('#ffffff'), delta * 15)
+           } else {
+             mat.color.lerp(new THREE.Color('#ff0000'), delta * 15)
+             mat.emissive.lerp(new THREE.Color('#ff0000'), delta * 15)
+           }
         }
       })
     }
@@ -259,12 +288,47 @@ export function EnhancedCarModel({
 
   return (
     <group ref={groupRef}>
-      <primitive 
-        object={clonedScene} 
-        scale={1}
-        position={[0, -0.4, 0]} 
-        rotation={[0, Math.PI, 0]}
-      />
+      {/* 
+        CRITICAL FIX: 
+        We wrap both the car primitive AND the procedural body kits inside a single group
+        with the exact same position and rotation transforms. 
+        This guarantees the body kits will NOT float when the car pitches or rolls!
+      */}
+      <group position={[0, -0.4, 0]} rotation={[0, Math.PI, 0]}>
+        <primitive 
+          object={clonedScene} 
+          scale={1}
+        />
+        
+        {/* --- BODY KITS --- */}
+        {/* Splitter (Front Lip) */}
+        {equippedSplitter && (
+          <group position={[0, 0.02, 1.15]}>
+            {/* Main Lip */}
+            <mesh geometry={geometryCache.splitterFront} material={materialsCache.carbon} />
+            {/* Left Winglet */}
+            <mesh position={[0.63, 0.04, -0.05]} geometry={geometryCache.splitterSide} material={materialsCache.carbon} />
+            {/* Right Winglet */}
+            <mesh position={[-0.63, 0.04, -0.05]} geometry={geometryCache.splitterSide} material={materialsCache.carbon} />
+          </group>
+        )}
+
+        {/* Spoiler (GT Wing) */}
+        {equippedSpoiler && (
+          <group position={[0, 0.9, -1.0]}>
+            {/* Main Wing */}
+            <mesh position={[0, 0.15, 0]} geometry={geometryCache.spoilerBase} material={materialsCache.carbon} />
+            {/* Left Stand */}
+            <mesh position={[0.4, 0.05, 0]} geometry={geometryCache.spoilerStand} material={materialsCache.blackPlastic} />
+            {/* Right Stand */}
+            <mesh position={[-0.4, 0.05, 0]} geometry={geometryCache.spoilerStand} material={materialsCache.blackPlastic} />
+            {/* Left Winglet */}
+            <mesh position={[0.6, 0.12, 0]} geometry={geometryCache.spoilerWinglet} material={materialsCache.carbon} />
+            {/* Right Winglet */}
+            <mesh position={[-0.6, 0.12, 0]} geometry={geometryCache.spoilerWinglet} material={materialsCache.carbon} />
+          </group>
+        )}
+      </group>
     </group>
   )
 }

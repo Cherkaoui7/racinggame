@@ -256,7 +256,8 @@ export function Car() {
     // Update vehicle visual state
     vehicleStateRef.current = {
       speed: currentSpeed,
-      isBraking: brake,
+      isBraking: brake || (isMovingForward && _backward),
+      isReversing: _backward && !isMovingForward,
       isNitro: isNitroRef.current,
       steering: steeringValue.current
     }

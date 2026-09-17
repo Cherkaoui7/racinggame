@@ -16,7 +16,9 @@ A high-performance, browser-based 3D racing game built with **React**, **Three.j
 - **Customizable Graphics**: Low, Medium, and High graphics presets. High enables real-time shadows, post-processing bloom, and higher pixel ratios, while Low optimizes textures and disables heavy post-processing for maximum speed.
 - **Immersive HUD**: A React-based, Tailwind-styled HUD featuring a real-time leaderboard, speedometer, minimap, and performance diagnostics panel.
 - **AAA Results Screen**: A beautifully designed, cyberpunk-themed post-race results screen displaying comprehensive race telemetry (Total Time, Best Lap, Top Speed, Nitro Uses, Longest Drift).
+- **Dynamic Lighting**: Real-time interactive vehicle lights. Tail lights glow bright red when braking, and emit white light when reversing.
 - **360° Interactive Garage**: Preview your car in a stylized garage environment. Rotate the camera, inspect details, and customize your vehicle's paint job (Purple, Red, Green).
+- **Procedural Body Kits**: Upgrade your car with aerodynamic components like front splitters and GT racing spoilers that attach perfectly to the vehicle chassis.
 - **Performance Optimized**: Built strictly using Zustand atomic selectors to completely decouple the 60FPS WebGL render loop from React's Virtual DOM reconciliation.
 
 ## 🛠️ Tech Stack

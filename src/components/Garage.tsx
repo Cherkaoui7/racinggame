@@ -36,6 +36,11 @@ export function Garage() {
   const safeIndex = currentIndex >= 0 ? currentIndex : 0
   const currentCarData = CARS[safeIndex]
 
+  const equippedSpoiler = useGameStore(s => s.equippedSpoiler)
+  const setEquippedSpoiler = useGameStore(s => s.setEquippedSpoiler)
+  const equippedSplitter = useGameStore(s => s.equippedSplitter)
+  const setEquippedSplitter = useGameStore(s => s.setEquippedSplitter)
+
   const handleNext = () => {
     const nextIndex = (safeIndex + 1) % CARS.length
     selectCar(CARS[nextIndex].id)
@@ -93,6 +98,35 @@ export function Garage() {
               <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
                 <div className="h-full bg-green-400" style={{ width: `${currentCarData.handling}%` }} />
               </div>
+            </div>
+          </div>
+          
+          <div className="mt-12">
+            <h3 className="text-cyan-400 font-bold uppercase tracking-widest text-sm mb-4 border-b border-white/10 pb-2">Body Kits</h3>
+            <div className="space-y-3">
+              <button 
+                onClick={() => setEquippedSplitter(!equippedSplitter)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded border transition-colors ${
+                  equippedSplitter 
+                    ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-300' 
+                    : 'bg-black/30 border-white/10 text-gray-400 hover:border-white/30 hover:text-white'
+                }`}
+              >
+                <span className="font-bold uppercase tracking-widest text-xs">Aero Front Splitter</span>
+                <div className={`w-3 h-3 rounded-full ${equippedSplitter ? 'bg-cyan-400 shadow-[0_0_8px_#22d3ee]' : 'bg-gray-700'}`} />
+              </button>
+              
+              <button 
+                onClick={() => setEquippedSpoiler(!equippedSpoiler)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded border transition-colors ${
+                  equippedSpoiler 
+                    ? 'bg-purple-500/20 border-purple-400/50 text-purple-300' 
+                    : 'bg-black/30 border-white/10 text-gray-400 hover:border-white/30 hover:text-white'
+                }`}
+              >
+                <span className="font-bold uppercase tracking-widest text-xs">GT Racing Spoiler</span>
+                <div className={`w-3 h-3 rounded-full ${equippedSpoiler ? 'bg-purple-400 shadow-[0_0_8px_#c084fc]' : 'bg-gray-700'}`} />
+              </button>
             </div>
           </div>
         </div>

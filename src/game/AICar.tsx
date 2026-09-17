@@ -297,6 +297,7 @@ export function AICar({
       vehicleStateRef.current = {
         speed: currentSpeed,
         isBraking: engineAccel < 0,
+        isReversing: false,
         isNitro: false,
         steering: steerValue
       }

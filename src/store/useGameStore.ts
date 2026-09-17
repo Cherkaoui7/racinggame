@@ -114,13 +114,20 @@ interface GameState {
   setPerfMetrics: (metrics: { frameTime: number; drawCalls: number; triangles: number }) => void
   setFps: (fps: number) => void
   setIsRaceStarted: (started: boolean) => void
+  equippedSpoiler: boolean
+  equippedSplitter: boolean
+  setEquippedSpoiler: (equipped: boolean) => void
+  setEquippedSplitter: (equipped: boolean) => void
 }
 
 const hwProfile = detectHardware()
 const savedQuality = (typeof localStorage !== 'undefined' ? localStorage.getItem('neon_racer_graphics') : null) as GraphicsOption | null
 const initialQuality: GraphicsOption = savedQuality && ['low', 'medium', 'high', 'auto'].includes(savedQuality) ? savedQuality : 'auto'
 const initialEffective: QualityPreset = initialQuality === 'auto' ? hwProfile.detectedTier : initialQuality
-const initialDpr = initialEffective === 'low' ? 0.8 : initialEffective === 'medium' ? 1.0 : 1.35
+const maxPixelRatio = 1.5
+const pixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, maxPixelRatio) : 1
+const initialScale = 1.0 // Start at 1.0 for all tiers, governor will drop if needed
+const initialDpr = pixelRatio * initialScale
 
 const DEFAULT_RACERS: RacerInfo[] = [
   { name: 'Cherkaoui', isPlayer: true, color: '#00f0ff', lap: 1, distance: 0, position: 1 },
@@ -280,6 +287,10 @@ export const useGameStore = create<GameState>((set) => ({
   isRaceStarted: false,
   gameId: 0,
   racers: DEFAULT_RACERS,
+  equippedSpoiler: false,
+  equippedSplitter: false,
+  setEquippedSpoiler: (equipped) => set({ equippedSpoiler: equipped }),
+  setEquippedSplitter: (equipped) => set({ equippedSplitter: equipped }),
   startGame: () =>
     set((state) => ({
       gameState: 'playing',

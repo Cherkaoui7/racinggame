@@ -77,21 +77,27 @@ export function PerformanceGovernor() {
       if (state.clock.elapsedTime - drsLastChange.current > 1.0 && samplesRecorded.current >= 60) {
         let targetScale = currentResolutionScale.current
 
+        let minScale = 0.7
+        if (effectiveQuality === 'high') minScale = 0.85
+        else if (effectiveQuality === 'medium') minScale = 0.8
+
         if (currentFps < 40) {
           // Drop resolution if struggling
-          targetScale = Math.max(0.6, currentResolutionScale.current - 0.1)
-        } else if (currentFps > 55) {
+          targetScale = Math.max(minScale, currentResolutionScale.current - 0.05)
+        } else if (currentFps > 52) {
           // Recover resolution if doing well
-          targetScale = Math.min(1.0, currentResolutionScale.current + 0.05)
+          targetScale = Math.min(1.0, currentResolutionScale.current + 0.02)
         }
 
         if (targetScale !== currentResolutionScale.current) {
           currentResolutionScale.current = targetScale
           drsLastChange.current = state.clock.elapsedTime
           
-          // Apply new scale to DPR
-          const baseDpr = effectiveQuality === 'low' ? 0.8 : effectiveQuality === 'medium' ? 1.0 : 1.35
-          setDynamicDpr(baseDpr * targetScale)
+          // Apply new scale to DPR based on native pixel ratio capped at 1.5
+          const maxPixelRatio = 1.5
+          const pixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, maxPixelRatio) : 1
+
+          setDynamicDpr(pixelRatio * targetScale)
           setResolutionScale(targetScale)
         }
       }
@@ -106,12 +112,14 @@ export function PerformanceGovernor() {
         if (effectiveQuality === 'high') {
           setEffectiveQuality('medium')
           currentResolutionScale.current = 1.0 // Reset scale for new tier
-          setDynamicDpr(1.0)
+          const pixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1
+          setDynamicDpr(pixelRatio * 1.0)
           setResolutionScale(1.0)
         } else if (effectiveQuality === 'medium') {
           setEffectiveQuality('low')
           currentResolutionScale.current = 1.0
-          setDynamicDpr(0.8)
+          const pixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1
+          setDynamicDpr(pixelRatio * 1.0)
           setResolutionScale(1.0)
         }
       }

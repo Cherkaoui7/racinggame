@@ -91,7 +91,7 @@ const GfxPill = memo(function GfxPill() {
 // 4. Live FPS & Dynamic Resolution Telemetry
 const LiveTelemetry = memo(function LiveTelemetry() {
   const fps = useGameStore(s => s.fps)
-  const dynamicDpr = useGameStore(s => s.dynamicDpr)
+  const resolutionScale = useGameStore(s => s.resolutionScale)
 
   return (
     <div className="bg-[#030914] border border-white/10 px-2.5 py-1 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.5)] flex items-center gap-1.5">
@@ -105,7 +105,7 @@ const LiveTelemetry = memo(function LiveTelemetry() {
         {fps} FPS
       </span>
       <span className="text-[10px] font-mono text-cyan-400/80 bg-cyan-950/60 px-1 py-0.2 rounded border border-cyan-500/20">
-        {Math.round(dynamicDpr * 100)}% Res
+        {Math.round(resolutionScale * 100)}% Res
       </span>
     </div>
   )
