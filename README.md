@@ -69,5 +69,12 @@ This project implements several advanced techniques to squeeze maximum performan
 - **Memory Allocation**: Physical vectors, quaternions, and matrices are instantiated exactly once using a shared `createScratch()` helper pattern, eliminating Garbage Collection (GC) pauses during gameplay.
 - **Dynamic DPR**: The game uses a `PerformanceGovernor` to dynamically throttle `devicePixelRatio` during intense GPU scenes.
 
+## 🛡️ Security & Anti-Cheat
+As a frontend-only browser game, server-side authoritative physics are impossible. However, the game implements several strict anti-tamper measures to prevent casual client-side manipulation:
+- **Console Obfuscation**: The global `console.log`, `info`, and `warn` methods are swallowed in production to prevent hackers from reverse-engineering the state or reading telemetry.
+- **Context Menu Lock**: The `oncontextmenu` event is globally blocked, preventing users from casually inspecting elements to manipulate the DOM or Canvas.
+- **Closed WebGL Backdoors**: The Three.js WebGL context is strictly encapsulated within React Three Fiber, ensuring hackers cannot hook into the renderer via the browser console to extract assets or manipulate the camera matrix.
+- **Checkpoint Validation**: The lap timing system verifies sequential checkpoint completion to ensure players cannot trigger the finish line early.
+
 ## 📝 License
 This project is for educational and entertainment purposes.

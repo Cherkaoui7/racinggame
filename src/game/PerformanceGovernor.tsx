@@ -24,7 +24,6 @@ export function PerformanceGovernor() {
 
 
   useFrame((state, delta) => {
-    (window as any).__threeGl = state.gl
     // Discard abnormal frame spikes (e.g. browser tab switching / minimizing)
     const clampedDelta = Math.min(0.2, Math.max(0.001, delta))
 
@@ -41,7 +40,7 @@ export function PerformanceGovernor() {
     frameIndex.current = (idx + 1) % SAMPLE_COUNT
 
     const avgDelta = sumFrameTimes.current / Math.max(1, samplesRecorded.current)
-    const currentFps = Math.min(120, Math.max(10, Math.round(1 / Math.max(0.001, avgDelta))))
+    const currentFps = Math.round(1 / Math.max(0.001, avgDelta))
 
     // Throttled HUD FPS update (every 250ms) to prevent excessive React state churn
     if (state.clock.elapsedTime - lastFpsUpdate.current > 0.25) {

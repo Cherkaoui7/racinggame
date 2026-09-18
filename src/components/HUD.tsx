@@ -5,7 +5,6 @@ import { Countdown } from './Countdown'
 import { RaceResults } from './RaceResults'
 import { RaceTimer } from './RaceTimer'
 import { Minimap } from './MinimapTracker'
-import { PerformancePanel } from './PerformancePanel'
 import { Camera, Zap, Monitor, Activity } from 'lucide-react'
 
 // 1. Lap Counter
@@ -273,7 +272,7 @@ export function HUD() {
         <NitroMeter />
       </div>
 
-      <PerformancePanel />
+
     </div>
   )
 }
