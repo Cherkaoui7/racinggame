@@ -379,7 +379,8 @@ export function Car() {
       targetCameraQuaternion.set(0, -Math.SQRT1_2, 0, Math.SQRT1_2)
       isInitialCameraSet.current = true
     } else {
-      targetCameraQuaternion.slerp(quaternion, rotLerpSpeed * safeDelta)
+      const safeSlerp = Math.min(1.0, rotLerpSpeed * safeDelta)
+      targetCameraQuaternion.slerp(quaternion, safeSlerp)
     }
 
     // 1) Position: Exactly offset from the car using the SMOOTHED rotation
@@ -396,7 +397,7 @@ export function Car() {
     // Dynamic FOV for speed sensation (subtle) — only update projection matrix on significant change
     const cam = state.camera as THREE.PerspectiveCamera
     const targetFov = 60 + (currentSpeed * 0.1) + (isNitro ? 5 : 0)
-    const newFov = THREE.MathUtils.lerp(cam.fov, targetFov, 0.1)
+    const newFov = THREE.MathUtils.lerp(cam.fov, targetFov, Math.min(1.0, 5.0 * safeDelta))
     if (Math.abs(newFov - cam.fov) > 0.3) {
       cam.fov = newFov
       cam.updateProjectionMatrix()
@@ -429,30 +430,6 @@ export function Car() {
           />
         </group>
 
-        {/* Rear Neon Underglow Bar & Ground Glow */}
-        <mesh position={[0, -0.32, 1.45]}>
-          <boxGeometry args={[1.2, 0.03, 0.05]} />
-          <meshStandardMaterial color="#ec4899" emissive="#ec4899" emissiveIntensity={5} />
-        </mesh>
-        {effectiveQuality === 'high' && (
-          <>
-            <pointLight position={[0, -0.2, 1.45]} color="#ec4899" intensity={4} distance={6} decay={2} />
-            <pointLight position={[0, -0.1, 0]} color="#ec4899" intensity={2} distance={5} decay={2} />
-          </>
-        )}
-
-        {/* Front Headlights Illuminating Track Ahead */}
-        {effectiveQuality !== 'low' && (
-          <pointLight position={[0, 0.35, -2.6]} color="#f8fafc" intensity={effectiveQuality === 'high' ? 5 : 3} distance={effectiveQuality === 'high' ? 28 : 18} decay={1.3} />
-        )}
-        <mesh position={[-0.55, 0.15, -1.85]}>
-          <sphereGeometry args={[0.07, 8, 8]} />
-          <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={4} />
-        </mesh>
-        <mesh position={[0.55, 0.15, -1.85]}>
-          <sphereGeometry args={[0.07, 8, 8]} />
-          <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={4} />
-        </mesh>
       </group>
     </RigidBody>
     <NitroParticles carRef={bodyRef} isNitroRef={isNitroRef} />

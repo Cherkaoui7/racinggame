@@ -252,24 +252,32 @@ export function EnhancedCarModel({
     const isBraking = state?.isBraking || false
     const steering = state?.steering || 0
 
+    // Pre-allocate colors outside the frame loop to prevent GC stutter
+    const reverseColor = new THREE.Color('#aaaaaa')
+    const reverseEmissive = new THREE.Color('#ffffff')
+    const brakeColor = new THREE.Color('#ff0000')
+
     // 1. Dynamic Brake Lights
     if (carVisualFeatures.enhancedLights && brakeLightRefs.current.length > 0) {
       const isReversing = state?.isReversing || false
       
       const targetBrakeIntensity = isReversing ? 2.0 : (isBraking ? 5.0 : 1.0)
       
+      // Calculate a safe alpha for lerping (clamped to 1.0 to prevent NaN explosions on lag)
+      const safeAlpha = Math.min(1, delta * 15)
+      
       // Since all tail lights on a car share the same material, we only update the tracked mesh's material once!
       brakeLightRefs.current.forEach(mesh => {
         if (mesh.material) {
            const mat = mesh.material as THREE.MeshStandardMaterial
-           mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetBrakeIntensity, delta * 15)
+           mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetBrakeIntensity, safeAlpha)
            
            if (isReversing) {
-             mat.color.lerp(new THREE.Color('#aaaaaa'), delta * 15)
-             mat.emissive.lerp(new THREE.Color('#ffffff'), delta * 15)
+             mat.color.lerp(reverseColor, safeAlpha)
+             mat.emissive.lerp(reverseEmissive, safeAlpha)
            } else {
-             mat.color.lerp(new THREE.Color('#ff0000'), delta * 15)
-             mat.emissive.lerp(new THREE.Color('#ff0000'), delta * 15)
+             mat.color.lerp(brakeColor, safeAlpha)
+             mat.emissive.lerp(brakeColor, safeAlpha)
            }
         }
       })
@@ -281,8 +289,9 @@ export function EnhancedCarModel({
       const targetPitch = isBraking ? -0.02 : (speed > 10 ? 0.01 : 0)
       const targetRoll = steering * 0.03 * Math.min(1.0, speed / 50)
       
-      groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, targetPitch, delta * 5)
-      groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, targetRoll, delta * 5)
+      const rotAlpha = Math.min(1, delta * 5)
+      groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, targetPitch, rotAlpha)
+      groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, targetRoll, rotAlpha)
     }
   })
 
