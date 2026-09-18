@@ -79,7 +79,6 @@ export function Car() {
   const [subscribeKeys, getKeys] = useKeyboardControls()
   const selectedCar = useGameStore(s => s.selectedCar)
   const isGameOver = useGameStore(s => s.isGameOver)
-  const effectiveQuality = useGameStore(s => s.effectiveQuality)
   const setPlayerRef = useGameStore(s => s.setPlayerRef)
   const cycleCamera = useGameStore(s => s.cycleCamera)
   
@@ -160,7 +159,10 @@ export function Car() {
       hasStartedAudio.current = true
     }
     
-    const safeDelta = Math.min(delta, 0.1)
+    // Prevent NaN/Infinity propagation from R3F during tab switches
+    let safeDelta = delta
+    if (isNaN(safeDelta) || !isFinite(safeDelta) || safeDelta < 0) safeDelta = 0.016
+    safeDelta = Math.min(safeDelta, 0.1)
 
     // Keep car locked in place on starting grid until race officially starts
     if (!isRaceStarted) {
@@ -381,6 +383,11 @@ export function Car() {
     } else {
       const safeSlerp = Math.min(1.0, rotLerpSpeed * safeDelta)
       targetCameraQuaternion.slerp(quaternion, safeSlerp)
+      
+      // Safety net: if quaternion gets corrupted by a NaN frame, reset it
+      if (isNaN(targetCameraQuaternion.x)) {
+        targetCameraQuaternion.copy(quaternion)
+      }
     }
 
     // 1) Position: Exactly offset from the car using the SMOOTHED rotation
@@ -396,8 +403,12 @@ export function Car() {
     
     // Dynamic FOV for speed sensation (subtle) — only update projection matrix on significant change
     const cam = state.camera as THREE.PerspectiveCamera
+    let currentFov = isNaN(cam.fov) ? 60 : cam.fov
     const targetFov = 60 + (currentSpeed * 0.1) + (isNitro ? 5 : 0)
-    const newFov = THREE.MathUtils.lerp(cam.fov, targetFov, Math.min(1.0, 5.0 * safeDelta))
+    
+    let newFov = THREE.MathUtils.lerp(currentFov, targetFov, Math.min(1.0, 5.0 * safeDelta))
+    if (isNaN(newFov) || !isFinite(newFov)) newFov = 60;
+    
     if (Math.abs(newFov - cam.fov) > 0.3) {
       cam.fov = newFov
       cam.updateProjectionMatrix()

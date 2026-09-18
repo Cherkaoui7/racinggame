@@ -10,13 +10,14 @@ A high-performance, browser-based 3D racing game built with **React**, **Three.j
 ## ✨ Features
 - **Real-Time 3D Racing**: Full 3D physics, steering, acceleration, and drifting mechanics.
 - **AI Opponents**: Intelligent AI drivers with distance-based Level of Detail (LOD) culling to save CPU cycles when they are far away.
-- **Dynamic Resolution Scaling (DRS)**: The game actively monitors your frame times and dynamically adjusts the internal WebGL resolution to maintain a target FPS without stuttering.
+- **Dynamic Resolution Scaling (DRS)**: The game monitors frame times and safely downgrades the graphics tier if performance struggles, ensuring smooth frame rates without WebGL context flashing.
 - **Lap Timing System**: Accurate millisecond-level lap tracking, recording your Best Lap and Total Race Time across 3-lap races.
 - **Checkpoint Validation**: Robust anti-cheat checkpoint system ensures laps are only counted when the track is completed sequentially.
 - **Customizable Graphics**: Low, Medium, and High graphics presets. High enables real-time shadows, post-processing bloom, and higher pixel ratios, while Low optimizes textures and disables heavy post-processing for maximum speed.
 - **Immersive HUD**: A React-based, Tailwind-styled HUD featuring a real-time leaderboard, speedometer, minimap, and performance diagnostics panel.
 - **AAA Results Screen**: A beautifully designed, cyberpunk-themed post-race results screen displaying comprehensive race telemetry (Total Time, Best Lap, Top Speed, Nitro Uses, Longest Drift).
-- **Dynamic Lighting**: Real-time interactive vehicle lights. Tail lights glow bright red when braking, and emit white light when reversing.
+- **Dynamic Lighting & Aesthetics**: Real-time vehicle headlights that illuminate the track. Tail lights glow bright red when braking, and emit white light when reversing. Model geometries are perfectly aligned using spatial heuristics.
+- **Physics Safety Engine**: The physics simulation is deeply sanitized against floating-point anomalies (NaN). The camera and AI vehicles implement rigorous fail-safes during frame drops to prevent physics explosions and world corruption.
 - **360° Interactive Garage**: Preview your car in a stylized garage environment. Rotate the camera, inspect details, and customize your vehicle's paint job (Purple, Red, Green).
 - **Procedural Body Kits**: Upgrade your car with aerodynamic components like front splitters and GT racing spoilers that attach perfectly to the vehicle chassis.
 - **Performance Optimized**: Built strictly using Zustand atomic selectors to completely decouple the 60FPS WebGL render loop from React's Virtual DOM reconciliation.

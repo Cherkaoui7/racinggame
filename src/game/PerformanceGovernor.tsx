@@ -21,9 +21,7 @@ export function PerformanceGovernor() {
   const lastGovernorCheck = useRef(0)
   const lastLeaderboardUpdate = useRef(0)
   
-  // DRS State
-  const currentResolutionScale = useRef(1.0)
-  const drsLastChange = useRef(0)
+
 
   useFrame((state, delta) => {
     (window as any).__threeGl = state.gl
@@ -69,58 +67,18 @@ export function PerformanceGovernor() {
       }
     }
 
-    const { graphicsQuality, effectiveQuality, setEffectiveQuality, setResolutionScale, setDynamicDpr } = useGameStore.getState()
-
-    // Dynamic Resolution Scaling (DRS)
-    if (graphicsQuality === 'auto' || graphicsQuality === 'high' || graphicsQuality === 'medium') {
-      // Allow DRS adjustments every 1 second
-      if (state.clock.elapsedTime - drsLastChange.current > 1.0 && samplesRecorded.current >= 60) {
-        let targetScale = currentResolutionScale.current
-
-        let minScale = 0.7
-        if (effectiveQuality === 'high') minScale = 0.85
-        else if (effectiveQuality === 'medium') minScale = 0.8
-
-        if (currentFps < 40) {
-          // Drop resolution if struggling
-          targetScale = Math.max(minScale, currentResolutionScale.current - 0.05)
-        } else if (currentFps > 52) {
-          // Recover resolution if doing well
-          targetScale = Math.min(1.0, currentResolutionScale.current + 0.02)
-        }
-
-        if (targetScale !== currentResolutionScale.current) {
-          currentResolutionScale.current = targetScale
-          drsLastChange.current = state.clock.elapsedTime
-          
-          // Apply new scale to DPR based on native pixel ratio capped at 1.5
-          const maxPixelRatio = 1.5
-          const pixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, maxPixelRatio) : 1
-
-          setDynamicDpr(pixelRatio * targetScale)
-          setResolutionScale(targetScale)
-        }
-      }
-    }
+    const { graphicsQuality, effectiveQuality, setEffectiveQuality } = useGameStore.getState()
 
     // Governor tier step-down (Auto quality only)
     if (graphicsQuality === 'auto' && state.clock.elapsedTime - lastGovernorCheck.current > 5.0 && samplesRecorded.current >= 60) {
       lastGovernorCheck.current = state.clock.elapsedTime
 
-      // If we are at max DRS drop and STILL struggling, downgrade tier
-      if (currentFps < 35 && currentResolutionScale.current <= 0.7) {
+      // If we are STILL struggling, downgrade tier
+      if (currentFps < 35) {
         if (effectiveQuality === 'high') {
           setEffectiveQuality('medium')
-          currentResolutionScale.current = 1.0 // Reset scale for new tier
-          const pixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1
-          setDynamicDpr(pixelRatio * 1.0)
-          setResolutionScale(1.0)
         } else if (effectiveQuality === 'medium') {
           setEffectiveQuality('low')
-          currentResolutionScale.current = 1.0
-          const pixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1
-          setDynamicDpr(pixelRatio * 1.0)
-          setResolutionScale(1.0)
         }
       }
     }

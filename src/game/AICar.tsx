@@ -152,6 +152,10 @@ export function AICar({
         effectiveDelta *= 2
       }
 
+      // CRITICAL: Prevent extreme lag spikes from generating massive physics torque/impulses
+      if (isNaN(effectiveDelta) || !isFinite(effectiveDelta)) effectiveDelta = 0.016
+      effectiveDelta = Math.min(effectiveDelta, 0.05)
+
       const wp = CIRCUIT_WAYPOINTS[currentWaypoint.current]
       const nextWp = CIRCUIT_WAYPOINTS[(currentWaypoint.current + 1) % CIRCUIT_WAYPOINTS.length]
 

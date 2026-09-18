@@ -141,9 +141,12 @@ export function SkidMarks({ carRef }: { carRef: React.RefObject<any> }) {
 
       _skidRight.set(1, 0, 0).applyQuaternion(_skidQuat)
       _skidRight.y = 0
-      _skidRight.normalize()
-
-      _skidLateral.copy(_skidVelocity).projectOnVector(_skidRight)
+      if (_skidRight.lengthSq() > 0.0001) {
+        _skidRight.normalize()
+        _skidLateral.copy(_skidVelocity).projectOnVector(_skidRight)
+      } else {
+        _skidLateral.set(0,0,0)
+      }
 
       if (_skidLateral.lengthSq() > 4) {
         const carPos = carRef.current.translation()

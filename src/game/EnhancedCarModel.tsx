@@ -247,6 +247,10 @@ export function EnhancedCarModel({
   }, [scene, targetBodyColor, isLow, isPlayer, opacity])
 
   useFrame((_, delta) => {
+    // Prevent NaN/Infinity propagation from R3F during tab switches
+    let safeDelta = delta
+    if (isNaN(safeDelta) || !isFinite(safeDelta) || safeDelta < 0) safeDelta = 0.016
+
     const state = vehicleStateRef?.current
     const speed = state?.speed || 0
     const isBraking = state?.isBraking || false
@@ -264,7 +268,7 @@ export function EnhancedCarModel({
       const targetBrakeIntensity = isReversing ? 2.0 : (isBraking ? 5.0 : 1.0)
       
       // Calculate a safe alpha for lerping (clamped to 1.0 to prevent NaN explosions on lag)
-      const safeAlpha = Math.min(1, delta * 15)
+      const safeAlpha = Math.min(1, safeDelta * 15)
       
       // Since all tail lights on a car share the same material, we only update the tracked mesh's material once!
       brakeLightRefs.current.forEach(mesh => {
@@ -289,7 +293,7 @@ export function EnhancedCarModel({
       const targetPitch = isBraking ? -0.02 : (speed > 10 ? 0.01 : 0)
       const targetRoll = steering * 0.03 * Math.min(1.0, speed / 50)
       
-      const rotAlpha = Math.min(1, delta * 5)
+      const rotAlpha = Math.min(1, safeDelta * 5)
       groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, targetPitch, rotAlpha)
       groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, targetRoll, rotAlpha)
     }
